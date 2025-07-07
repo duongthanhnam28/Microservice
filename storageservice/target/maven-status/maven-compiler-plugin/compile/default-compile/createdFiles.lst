@@ -1,0 +1,6 @@
+com\thanhnam\storageservice\controller\FileController.class
+com\thanhnam\storageservice\StorageServiceApplication.class
+com\thanhnam\storageservice\model\FileMetadata.class
+com\thanhnam\storageservice\model\FileMetadata$FileMetadataBuilder.class
+com\thanhnam\storageservice\service\FileStorageService.class
+com\thanhnam\storageservice\model\FileMetadataRepository.class

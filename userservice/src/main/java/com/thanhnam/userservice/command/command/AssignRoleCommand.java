@@ -1,0 +1,40 @@
+package com.thanhnam.userservice.command.command;
+
+public class AssignRoleCommand {
+    
+    private Integer maTaiKhoan;
+    private Integer maChucVu;
+    private String ten;
+    
+    public AssignRoleCommand() {}
+    
+    public AssignRoleCommand(Integer maTaiKhoan, Integer maChucVu, String ten) {
+        this.maTaiKhoan = maTaiKhoan;
+        this.maChucVu = maChucVu;
+        this.ten = ten;
+    }
+    
+    public Integer getMaTaiKhoan() {
+        return maTaiKhoan;
+    }
+    
+    public void setMaTaiKhoan(Integer maTaiKhoan) {
+        this.maTaiKhoan = maTaiKhoan;
+    }
+    
+    public Integer getMaChucVu() {
+        return maChucVu;
+    }
+    
+    public void setMaChucVu(Integer maChucVu) {
+        this.maChucVu = maChucVu;
+    }
+    
+    public String getTen() {
+        return ten;
+    }
+    
+    public void setTen(String ten) {
+        this.ten = ten;
+    }
+} 
