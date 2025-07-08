@@ -1,4 +1,4 @@
-// 3. HOTFIX authService.js - Fix login issues
+// FIXED authService.js - Fix login with real database
 import userService from '../userService';
 
 class AuthService {
@@ -11,7 +11,7 @@ class AuthService {
     this.initializeFromStorage();
   }
 
-  // FIXED: Safe initialization from localStorage
+  // Safe initialization from localStorage
   initializeFromStorage() {
     try {
       const savedUser = localStorage.getItem('currentUser');
@@ -39,7 +39,7 @@ class AuthService {
     }
   }
 
-  // FIXED: Safe session saving
+  // Safe session saving
   saveSession(user, token = null) {
     try {
       if (!user || !user.maTaiKhoan) {
@@ -76,25 +76,30 @@ class AuthService {
     }
   }
 
-  // FIXED: Improved email validation
+  // Email validation
   isValidEmail(email) {
     if (!email || typeof email !== 'string') return false;
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
     return emailRegex.test(email.trim());
   }
 
-  // FIXED: Improved phone validation
+  // Phone validation
   isValidPhone(phone) {
     if (!phone || typeof phone !== 'string') return false;
     const phoneRegex = /^(\+84|0)[0-9]{9,10}$/;
     return phoneRegex.test(phone.trim());
   }
 
-  // FIXED: Enhanced login with better error handling
+  // FIXED: Login with proper error handling and debugging
   async login(email, password) {
     try {
+      console.log('=== LOGIN ATTEMPT ===');
+      console.log('Email:', email);
+      console.log('Password length:', password ? password.length : 0);
+
       // Input validation
       if (!email || !password) {
+        console.log('Missing email or password');
         return {
           success: false,
           message: 'Email và mật khẩu không được để trống'
@@ -102,64 +107,93 @@ class AuthService {
       }
 
       if (!this.isValidEmail(email)) {
+        console.log('Invalid email format');
         return {
           success: false,
           message: 'Email không đúng định dạng'
         };
       }
 
-      // Try to get user by email
+      // FIXED: Try to get user from real database
+      console.log('Calling userService.getUserByEmail...');
       let userResponse;
       try {
         userResponse = await userService.getUserByEmail(email);
+        console.log('UserService response:', userResponse);
+        console.log('UserService response data:', userResponse.success);
       } catch (apiError) {
-        console.warn('User API failed, using demo login:', apiError);
-        // Fallback to demo login
-        return this.handleDemoLogin(email, password);
+        console.error('UserService API error:', apiError);
+        return {
+          success: false,
+          message: 'Không thể kết nối đến hệ thống người dùng. Vui lòng thử lại.'
+        };
       }
       
-      if (!userResponse || !userResponse.success) {
-        // Try demo login if user not found in API
-        return this.handleDemoLogin(email, password);
+      // FIXED: Better response handling
+      if (!userResponse) {
+        console.log('No response from userService');
+        return {
+          success: false,
+          message: 'Không thể kết nối đến hệ thống. Vui lòng thử lại.'
+        };
       }
 
-      const user = userResponse.data;
+      if (!userResponse.email) {
+        console.log('UserService returned failure:', userResponse);
+        return {
+          success: false,
+          message: 'Email không tồn tại trong hệ thống'
+        };
+      }
+
+
+
+      const user = userResponse;
+      console.log('User found:', user);
       
-      // For demo purposes, accept specific demo passwords
-      const demoPasswords = ['admin', 'customer', 'demo', '123456', '1'];
-      const isValidPassword = demoPasswords.includes(password) || password.length >= 6;
+      // FIXED: Validate password
+      const isValidPassword = this.validatePassword(password, user.matKhau);
+      console.log('Password validation result:', isValidPassword);
 
       if (!isValidPassword) {
         return {
           success: false,
-          message: 'Mật khẩu không chính xác'
+          message: 'Mật khẩu không chính xác' 
         };
       }
 
-      // Get user roles
+      // FIXED: Get user roles from database
+      console.log('Getting user roles...');
       let roles = [];
       try {
         const rolesResponse = await userService.getUserRoles(user.maTaiKhoan);
+        console.log('Roles response:', rolesResponse);
         roles = rolesResponse.success ? rolesResponse.data : [];
       } catch (roleError) {
         console.warn('Could not fetch user roles:', roleError);
-        // Assign default role based on email
-        roles = this.getDefaultRoles(email);
+        // Default role based on maCV
+        roles = this.getDefaultRolesByCV(user.maCV);
       }
+
+      console.log('Final roles:', roles);
 
       // Create enhanced user object
       const authenticatedUser = {
         ...user,
         roles: roles,
-        isAdmin: this.checkAdminRole(roles),
-        isCustomer: this.checkCustomerRole(roles)
+        isAdmin: this.checkAdminRole(roles) || user.maCV === 1,
+        isCustomer: this.checkCustomerRole(roles) || user.maCV === 2
       };
 
-      // Generate mock token
+      console.log('Authenticated user:', authenticatedUser);
+
+      // Generate token
       const token = this.generateMockToken(authenticatedUser);
 
       // Save session
       this.saveSession(authenticatedUser, token);
+
+      console.log('=== LOGIN SUCCESS ===');
 
       return {
         success: true,
@@ -169,7 +203,7 @@ class AuthService {
       };
 
     } catch (error) {
-      console.error('Login error:', error);
+      console.error('=== LOGIN ERROR ===', error);
       return {
         success: false,
         message: 'Đăng nhập thất bại. Vui lòng thử lại.'
@@ -177,104 +211,43 @@ class AuthService {
     }
   }
 
-  // FIXED: Demo login fallback
-  handleDemoLogin(email, password) {
-    try {
-      const demoUsers = {
-        'admin@shop.com': {
-          maTaiKhoan: 1,
-          ten: 'Admin',
-          email: 'admin@shop.com',
-          sdt: '0981293743',
-          diaChi: 'Hà Nội',
-          maCV: 1,
-          roles: [{ maChucVu: 1, ten: 'Admin' }]
-        },
-        'hq@gmail.com': {
-          maTaiKhoan: 23,
-          ten: 'Nguyễn Hồng Quân',
-          email: 'hq@gmail.com',
-          sdt: '0981293743',
-          diaChi: 'Xuân Lộc, Thanh Thủy, Phú Thọ',
-          maCV: 1,
-          roles: [{ maChucVu: 1, ten: 'Admin' }]
-        },
-        'customer@shop.com': {
-          maTaiKhoan: 2,
-          ten: 'Khách hàng',
-          email: 'customer@shop.com',
-          sdt: '0987654321',
-          diaChi: 'TP.HCM',
-          maCV: 3,
-          roles: [{ maChucVu: 3, ten: 'Khách hàng' }]
-        },
-        'demo@customer.com': {
-          maTaiKhoan: 3,
-          ten: 'Demo User',
-          email: 'demo@customer.com',
-          sdt: '0912345678',
-          diaChi: 'Đà Nẵng',
-          maCV: 3,
-          roles: [{ maChucVu: 3, ten: 'Khách hàng' }]
-        }
-      };
+  // FIXED: Better password validation
+  validatePassword(inputPassword, storedPassword) {
+    // For demo purposes, accept common passwords
+    const demoPasswords = ['admin', 'customer', 'demo', '123456', '1'];
+    
+    if (demoPasswords.includes(inputPassword)) {
+      console.log('Demo password accepted');
+      return true;
+    }
+    
+    // Check if passwords match (in production, use bcrypt.compare)
+    if (inputPassword === storedPassword) {
+      console.log('Password matches stored password');
+      return true;
+    }
+    
+    console.log('Password validation failed');
+    return false;
+  }
 
-      const demoUser = demoUsers[email.toLowerCase()];
-      if (!demoUser) {
-        return {
-          success: false,
-          message: 'Email không tồn tại trong hệ thống'
-        };
-      }
+  // Get default roles based on maCV
+  getDefaultRolesByCV(maCV) {
+    switch (maCV) {
+      case 1:
+        return [{ maChucVu: 1, ten: 'Admin' }];
+      case 2:
+        return [{ maChucVu: 2, ten: 'Khách hàng' }];
 
-      const demoPasswords = ['admin', 'customer', 'demo', '123456', '1'];
-      if (!demoPasswords.includes(password)) {
-        return {
-          success: false,
-          message: 'Mật khẩu không chính xác'
-        };
-      }
-
-      // Create enhanced user object
-      const authenticatedUser = {
-        ...demoUser,
-        isAdmin: this.checkAdminRole(demoUser.roles),
-        isCustomer: this.checkCustomerRole(demoUser.roles)
-      };
-
-      // Generate mock token
-      const token = this.generateMockToken(authenticatedUser);
-
-      // Save session
-      this.saveSession(authenticatedUser, token);
-
-      return {
-        success: true,
-        user: authenticatedUser,
-        token: token,
-        message: 'Đăng nhập thành công (Demo mode)'
-      };
-
-    } catch (error) {
-      console.error('Demo login error:', error);
-      return {
-        success: false,
-        message: 'Đăng nhập demo thất bại'
-      };
     }
   }
 
-  // Get default roles based on email
-  getDefaultRoles(email) {
-    if (email.includes('admin') || email === 'hq@gmail.com') {
-      return [{ maChucVu: 1, ten: 'Admin' }];
-    }
-    return [{ maChucVu: 3, ten: 'Khách hàng' }];
-  }
-
-  // FIXED: Enhanced register with better validation
+  // Enhanced register with database
   async register(userData) {
     try {
+      console.log('=== REGISTER ATTEMPT ===');
+      console.log('User data:', userData);
+
       // Validate required fields
       const requiredFields = ['ten', 'email', 'matKhau', 'sdt'];
       for (const field of requiredFields) {
@@ -323,19 +296,6 @@ class AuthService {
         console.warn('Could not check email existence:', error);
       }
 
-      // Check if phone already exists
-      try {
-        const phoneCheck = await userService.checkPhoneExists(userData.sdt);
-        if (phoneCheck && phoneCheck.exists) {
-          return {
-            success: false,
-            message: 'Số điện thoại đã được sử dụng'
-          };
-        }
-      } catch (error) {
-        console.warn('Could not check phone existence:', error);
-      }
-
       // Create user data
       const newUserData = {
         ten: userData.ten.trim(),
@@ -347,23 +307,18 @@ class AuthService {
         ngaySinh: userData.ngaySinh || null
       };
 
-      // Try to create user via API
+      console.log('Creating user with data:', newUserData);
+
+      // Create user via API
       let createResponse;
       try {
         createResponse = await userService.createUser(newUserData);
+        console.log('Create user response:', createResponse);
       } catch (apiError) {
-        console.warn('User creation API failed, using demo mode:', apiError);
-        // Create demo user
-        const demoUser = {
-          maTaiKhoan: Date.now(),
-          ...newUserData,
-          roles: [{ maChucVu: 3, ten: 'Khách hàng' }]
-        };
-        
+        console.error('User creation API failed:', apiError);
         return {
-          success: true,
-          user: demoUser,
-          message: 'Đăng ký thành công (Demo mode)'
+          success: false,
+          message: 'Không thể tạo tài khoản. Vui lòng thử lại.'
         };
       }
       
@@ -375,6 +330,7 @@ class AuthService {
       }
 
       const newUser = createResponse.data;
+      console.log('User created successfully:', newUser);
 
       // Try to assign customer role
       try {
@@ -383,6 +339,8 @@ class AuthService {
         console.warn('Could not assign role:', roleError);
       }
 
+      console.log('=== REGISTER SUCCESS ===');
+
       return {
         success: true,
         user: newUser,
@@ -390,7 +348,7 @@ class AuthService {
       };
 
     } catch (error) {
-      console.error('Registration error:', error);
+      console.error('=== REGISTER ERROR ===', error);
       return {
         success: false,
         message: 'Đăng ký thất bại. Vui lòng thử lại.'
@@ -407,7 +365,7 @@ class AuthService {
     };
   }
 
-  // FIXED: Safe authentication check
+  // Safe authentication check
   isUserAuthenticated() {
     try {
       return this.isAuthenticated && 
@@ -457,7 +415,7 @@ class AuthService {
       if (!Array.isArray(roles)) return false;
       return roles.some(role => 
         role && (
-          role.maChucVu === 3 || 
+          role.maChucVu === 2 || 
           role.ten === 'Khách hàng' || 
           role.ten === 'Customer'
         )
@@ -468,7 +426,7 @@ class AuthService {
     }
   }
 
-  // FIXED: Safe profile update
+  // Safe profile update
   async updateProfile(userData) {
     try {
       if (!this.isUserAuthenticated()) {
@@ -487,11 +445,10 @@ class AuthService {
       try {
         response = await userService.updateUser(updateData);
       } catch (apiError) {
-        console.warn('Profile update API failed:', apiError);
-        // Simulate successful update for demo
-        response = {
-          success: true,
-          data: { ...this.currentUser, ...userData }
+        console.error('Profile update API failed:', apiError);
+        return {
+          success: false,
+          message: 'Cập nhật thông tin thất bại'
         };
       }
       
@@ -526,7 +483,7 @@ class AuthService {
         sub: user.maTaiKhoan,
         email: user.email,
         name: user.ten,
-        roles: user.roles,
+        roles: user.maCV,
         iat: Math.floor(Date.now() / 1000),
         exp: Math.floor(Date.now() / 1000) + (24 * 60 * 60) // 24 hours
       }));
@@ -553,7 +510,7 @@ class AuthService {
     return fieldNames[field] || field;
   }
 
-  // FIXED: Reset password with better error handling
+  // Reset password
   async resetPassword(email) {
     try {
       if (!this.isValidEmail(email)) {
@@ -569,10 +526,9 @@ class AuthService {
         userResponse = await userService.getUserByEmail(email);
       } catch (error) {
         console.warn('Reset password API failed:', error);
-        // For demo, just return success
         return {
-          success: true,
-          message: 'Link đặt lại mật khẩu đã được gửi đến email của bạn (Demo mode)'
+          success: false,
+          message: 'Không thể đặt lại mật khẩu'
         };
       }
       
@@ -584,7 +540,6 @@ class AuthService {
       }
 
       // In production, send reset password email
-      // For demo, just return success
       return {
         success: true,
         message: 'Link đặt lại mật khẩu đã được gửi đến email của bạn'

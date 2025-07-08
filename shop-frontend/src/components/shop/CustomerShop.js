@@ -1,4 +1,4 @@
-// 2. HOTFIX CustomerShop.js - Fix products display issues
+// UPDATED CustomerShop.js - Pass login success handler to parent
 import React, { useState, useEffect } from 'react';
 import apiService from '../../services/api/apiService';
 import authService from '../../services/api/authService';
@@ -8,7 +8,7 @@ import { notificationManager } from '../layout/Notification/Notification';
 import EnhancedCheckout from '../order/EnhacedCheckout/EnhancedCheckout';
 import './CustomerShop.css';
 
-const CustomerShop = () => {
+const CustomerShop = ({ onModeChange, onLoginSuccess }) => {
   const [products, setProducts] = useState([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
@@ -29,11 +29,11 @@ const CustomerShop = () => {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
 
   const categories = [
-    { id: '', name: 'Tất cả sản phẩm' },
+    { id: '', name: 'Tất cả' },
     { id: 1, name: 'Máy giặt' },
     { id: 2, name: 'Điều hòa' },
     { id: 3, name: 'Tủ lạnh' },
-    { id: 6, name: 'Nồi cơm điện' },
+    { id: 6, name: 'Nồi cơm' },
     { id: 7, name: 'Ti vi' },
     { id: 8, name: 'Quạt điện' },
     { id: 9, name: 'Máy lọc nước' }
@@ -41,12 +41,12 @@ const CustomerShop = () => {
 
   const sortOptions = [
     { value: 'newest', label: 'Mới nhất' },
-    { value: 'price-low', label: 'Giá thấp đến cao' },
-    { value: 'price-high', label: 'Giá cao đến thấp' },
-    { value: 'best-selling', label: 'Bán chạy nhất' }
+    { value: 'price-low', label: 'Giá thấp' },
+    { value: 'price-high', label: 'Giá cao' },
+    { value: 'best-selling', label: 'Bán chạy' }
   ];
 
-  // Check authentication
+  // Check authentication on mount
   useEffect(() => {
     try {
       if (authService.isUserAuthenticated()) {
@@ -59,7 +59,7 @@ const CustomerShop = () => {
     }
   }, []);
 
-  // FIXED: Better product loading with error handling
+  // Load products
   useEffect(() => {
     const fetchProducts = async () => {
       setLoading(true);
@@ -86,11 +86,8 @@ const CustomerShop = () => {
   
     fetchProducts();
   }, []);
-  
 
- 
-
-  // Load cart from localStorage with error handling
+  // Load cart from localStorage
   useEffect(() => {
     try {
       const savedCart = localStorage.getItem('cart');
@@ -103,7 +100,6 @@ const CustomerShop = () => {
             setCart(parsedCart);
           }
         } catch (error) {
-          console.error('Error parsing cart:', error);
           localStorage.removeItem('cart');
           setCart([]);
         }
@@ -116,7 +112,6 @@ const CustomerShop = () => {
             setFavorites(parsedFavorites);
           }
         } catch (error) {
-          console.error('Error parsing favorites:', error);
           localStorage.removeItem('favorites');
           setFavorites([]);
         }
@@ -126,7 +121,7 @@ const CustomerShop = () => {
     }
   }, []);
 
-  // Save cart to localStorage with error handling
+  // Save cart to localStorage
   useEffect(() => {
     try {
       localStorage.setItem('cart', JSON.stringify(cart));
@@ -143,7 +138,7 @@ const CustomerShop = () => {
     }
   }, [favorites]);
 
-  // FIXED: Safe formatting functions
+  // Utility functions
   const formatPrice = (price) => {
     try {
       const numPrice = Number(price) || 0;
@@ -175,7 +170,7 @@ const CustomerShop = () => {
     }
   };
 
-  // FIXED: Safe filtering and sorting
+  // Filter and sort products
   const filteredAndSortedProducts = products
     .filter(product => {
       try {
@@ -214,13 +209,18 @@ const CustomerShop = () => {
       }
     });
 
-  // Auth functions with error handling
+  // FIXED: Handle login success and pass to parent
   const handleLoginSuccess = (userData) => {
     try {
       setUser(userData);
       setIsAuthenticated(true);
       setShowAuthModal(false);
       notificationManager.success(`Chào mừng ${userData.ten}!`);
+      
+      // FIXED: Pass login success to parent App component
+      if (onLoginSuccess) {
+        onLoginSuccess(userData);
+      }
     } catch (error) {
       console.error('Login success handler error:', error);
       notificationManager.error('Có lỗi xảy ra sau khi đăng nhập');
@@ -245,7 +245,7 @@ const CustomerShop = () => {
     setShowAuthModal(true);
   };
 
-  // FIXED: Safe cart functions
+  // Cart functions
   const addToCart = (product, quantity = 1) => {
     try {
       if (!product || !product.maSP) {
@@ -416,8 +416,8 @@ const CustomerShop = () => {
 
   return (
     <div className="customer-shop">
-      {/* Header */}
-      <div className="shop-header">
+      {/* Compact Header */}
+      <div className="shop-header compact">
         <div className="header-content">
           <div className="logo">
             <h1>🛍️ OnlineShop</h1>
@@ -434,22 +434,22 @@ const CustomerShop = () => {
           </div>
 
           <div className="header-actions">
-            {/* Auth buttons/profile */}
             {isAuthenticated ? (
               <UserProfileMenu 
                 user={user} 
                 onLogout={handleLogout}
+                onModeChange={onModeChange}
               />
             ) : (
               <div className="auth-buttons">
                 <button 
-                  className="auth-btn login-btn"
+                  className="auth-btn"
                   onClick={() => openAuthModal('login')}
                 >
                   🔑 Đăng nhập
                 </button>
                 <button 
-                  className="auth-btn register-btn"
+                  className="auth-btn"
                   onClick={() => openAuthModal('register')}
                 >
                   📝 Đăng ký
@@ -461,32 +461,29 @@ const CustomerShop = () => {
               className="favorites-btn"
               onClick={() => notificationManager.info(`Bạn có ${favorites.length} sản phẩm yêu thích`)}
             >
-              ❤️ Yêu thích ({favorites.length})
+              ❤️ ({favorites.length})
             </button>
 
-            {/* Cart + Checkout buttons next to each other */}
-            <div className="cart-checkout-group">
-              <button 
-                className="cart-btn"
-                onClick={() => setShowCart(true)}
-              >
-                🛒 Giỏ hàng ({getTotalCartItems()})
-              </button>
+            <button 
+              className="cart-btn"
+              onClick={() => setShowCart(true)}
+            >
+              🛒 ({getTotalCartItems()})
+            </button>
               
-              <button 
-                className="checkout-btn"
-                onClick={handleStartCheckout}
-                disabled={cart.length === 0}
-              >
-                💳 Đặt hàng
-              </button>
-            </div>
+            <button 
+              className="checkout-btn"
+              onClick={handleStartCheckout}
+              disabled={cart.length === 0}
+            >
+              💳 Đặt hàng
+            </button>
           </div>
         </div>
       </div>
 
-      {/* Filters */}
-      <div className="shop-filters">
+      {/* Compact Filters */}
+      <div className="shop-filters compact">
         <div className="filters-content">
           <select 
             value={selectedCategory} 

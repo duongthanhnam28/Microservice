@@ -10,5 +10,4 @@ import lombok.*;
 public class RoleResponseModel {
     private Integer maCV;
     private String tenChucVu;
-    private String moTa;
 } 

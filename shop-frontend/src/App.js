@@ -1,8 +1,8 @@
-// src/App.js - Final version với routing đơn giản
+// FIXED App.js - No Navigation, Login-based redirect
 import React, { useEffect, useState } from 'react';
 import AdminLayout from './components/admin/AdminLayout/AdminLayout';
 import CustomerShop from './components/shop/CustomerShop';
-import Navigation from './components/layout/Navigation/Navigation';
+import authService from './services/api/authService';
 import { NotificationContainer } from './components/layout/Notification/Notification';
 import './App.css';
 
@@ -11,28 +11,16 @@ function App() {
   const [isLoading, setIsLoading] = useState(true);
   const [isTransitioning, setIsTransitioning] = useState(false);
 
-  // Initialize app mode
+  // FIXED: Initialize app without auto-login
   useEffect(() => {
     const initializeApp = () => {
-      const urlPath = window.location.pathname;
-      const savedMode = localStorage.getItem('appMode');
+      // Always start with customer mode (no auto-login)
+      setCurrentMode('customer');
+      updateAppState('customer');
       
-      let initialMode = 'customer';
-      
-      if (urlPath.includes('/admin')) {
-        initialMode = 'admin';
-      } else if (urlPath.includes('/shop') || urlPath === '/') {
-        initialMode = 'customer';
-      } else if (savedMode && ['admin', 'customer'].includes(savedMode)) {
-        initialMode = savedMode;
-      }
-      
-      setCurrentMode(initialMode);
-      updateAppState(initialMode);
-      
-      const expectedPath = initialMode === 'admin' ? '/admin' : '/shop';
-      if (window.location.pathname !== expectedPath) {
-        window.history.replaceState({}, '', expectedPath);
+      // Set URL to customer
+      if (window.location.pathname !== '/shop') {
+        window.history.replaceState({}, '', '/shop');
       }
       
       setIsLoading(false);
@@ -61,24 +49,6 @@ function App() {
     return () => window.removeEventListener('popstate', handlePopState);
   }, [currentMode]);
 
-  // Listen for custom mode change events
-  useEffect(() => {
-    const handleModeChanged = (event) => {
-      const { mode } = event.detail;
-      if (mode !== currentMode) {
-        setIsTransitioning(true);
-        setTimeout(() => {
-          setCurrentMode(mode);
-          updateAppState(mode);
-          setIsTransitioning(false);
-        }, 200);
-      }
-    };
-
-    window.addEventListener('modeChanged', handleModeChanged);
-    return () => window.removeEventListener('modeChanged', handleModeChanged);
-  }, [currentMode]);
-
   const updateAppState = (mode) => {
     document.title = mode === 'admin' 
       ? 'Admin Panel - Quản lý cửa hàng' 
@@ -96,8 +66,23 @@ function App() {
     localStorage.setItem('appMode', mode);
   };
 
+  // FIXED: Handle mode change with auth check
   const handleModeChange = (newMode) => {
     if (newMode === currentMode) return;
+    
+    // Check if user is authenticated and admin for admin mode
+    if (newMode === 'admin') {
+      if (!authService.isUserAuthenticated()) {
+        alert('Vui lòng đăng nhập để truy cập trang quản trị');
+        return;
+      }
+      
+      const user = authService.getCurrentUser();
+      if (!user.isAdmin) {
+        alert('Bạn không có quyền truy cập trang quản trị');
+        return;
+      }
+    }
     
     setIsTransitioning(true);
     
@@ -110,6 +95,18 @@ function App() {
       updateAppState(newMode);
       setIsTransitioning(false);
     }, 200);
+  };
+
+  // FIXED: Handle login success with auto-redirect for admin
+  const handleLoginSuccess = (userData) => {
+    console.log('Login successful, user data:', userData);
+    
+    // If user is admin, automatically redirect to admin panel
+    if (userData.isAdmin) {
+      setTimeout(() => {
+        handleModeChange('admin');
+      }, 1000);
+    }
   };
 
   if (isLoading) {
@@ -131,26 +128,27 @@ function App() {
 
   return (
     <div className="App">
-      {/* Show Navigation only in customer mode */}
-      {currentMode === 'customer' && (
-        <Navigation 
-          currentMode={currentMode} 
-          onModeChange={handleModeChange}
-        />
-      )}
+      {/* FIXED: No Navigation component */}
       
       {/* Main Content */}
       <main className={`main-content ${isTransitioning ? 'transitioning' : ''}`}>
         <div className="content-wrapper">
           {currentMode === 'admin' ? (
-            <AdminLayout key="admin" onModeChange={handleModeChange} />
+            <AdminLayout 
+              key="admin" 
+              onModeChange={handleModeChange}
+            />
           ) : (
-            <CustomerShop key="customer" />
+            <CustomerShop 
+              key="customer" 
+              onModeChange={handleModeChange}
+              onLoginSuccess={handleLoginSuccess}
+            />
           )}
         </div>
       </main>
       
-      {/* Show Footer only in customer mode */}
+      {/* FIXED: Show Footer only in customer mode */}
       {currentMode === 'customer' && (
         <footer className="app-footer">
           <div className="footer-content">

@@ -162,8 +162,7 @@ public class UserCommandService {
             // Save new role
             UserRole userRole = new UserRole(
                     command.getMaTaiKhoan(),
-                    command.getMaChucVu(),
-                    command.getTen()
+                    command.getMaChucVu()
             );
             userRoleRepository.save(userRole);
 

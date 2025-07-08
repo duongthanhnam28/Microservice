@@ -13,12 +13,10 @@ import lombok.*;
 public class Role {
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
-    @Column(name = "MaCV")
+    @Column(name = "MaChucVu")
     private Integer maCV;
-
     @Column(name = "TenChucVu")
     private String tenChucVu;
 
-    @Column(name = "MoTa")
-    private String moTa;
+
 } 

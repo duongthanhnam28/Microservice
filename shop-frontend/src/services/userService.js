@@ -51,7 +51,7 @@ class UserService {
 
   // Get user by email
   async getUserByEmail(email) {
-    return await this.request(`/email/${encodeURIComponent(email)}`);
+    return await this.request(`/email/${(email)}`);
   }
 
   // Get users by role
@@ -140,13 +140,12 @@ class UserService {
   }
 
   // Assign role to user
-  async assignRole(maTaiKhoan, maChucVu, ten = '') {
+  async assignRole(maTaiKhoan, maChucVu) {
     return await this.request('/assign-role', {
       method: 'POST',
       body: JSON.stringify({
         maTaiKhoan,
-        maChucVu,
-        ten
+        maChucVu
       }),
     });
   }

@@ -91,9 +91,8 @@ public class UserAggregate {
             this.user.setMatKhau(command.getMatKhau());
         }
 
-        if (command.getMaCV() != null) {
-            this.user.setMaCV(command.getMaCV());
-        }
+        // Note: MaCV is managed through UserRole relationship, not directly on User
+        // The setMaCV method doesn't exist on User entity
 
         return new UserUpdatedEvent(
                 this.user.getMaTaiKhoan(),
@@ -142,8 +141,7 @@ public class UserAggregate {
 
         UserRole userRole = new UserRole(
                 command.getMaTaiKhoan(),
-                command.getMaChucVu(),
-                command.getTen()
+                command.getMaChucVu()
         );
 
         this.userRoles.add(userRole);
@@ -208,14 +206,13 @@ public class UserAggregate {
         this.user.setDiaChi(event.getDiaChi());
         this.user.setEmail(event.getEmail());
         this.user.setMatKhau(event.getMatKhau());
-        this.user.setMaCV(event.getMaCV());
+        // Note: MaCV is managed through UserRole relationship, not directly on User
     }
 
     public void on(UserRoleAssignedEvent event) {
         UserRole userRole = new UserRole(
                 event.getMaTaiKhoan(),
-                event.getMaChucVu(),
-                event.getTen()
+                event.getMaChucVu()
         );
         this.userRoles.add(userRole);
     }

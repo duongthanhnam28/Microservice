@@ -82,7 +82,6 @@ public class UserQueryController {
         return RoleResponseModel.builder()
                 .maCV(role.getMaCV())
                 .tenChucVu(role.getTenChucVu())
-                .moTa(role.getMoTa())
                 .build();
     }
 }

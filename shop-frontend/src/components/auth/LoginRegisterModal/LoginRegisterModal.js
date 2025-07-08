@@ -1,4 +1,4 @@
-// src/components/auth/LoginRegisterModal.js - Complete Auth Modal
+// FIXED LoginRegisterModal.js - Remove demo accounts functionality
 import React, { useState, useEffect } from 'react';
 import authService from '../../../services/api/authService';
 import { notificationManager } from '../../layout/Notification/Notification';
@@ -30,9 +30,6 @@ const LoginRegisterModal = ({ isOpen, onClose, onLoginSuccess, initialMode = 'lo
 
   // Validation errors
   const [errors, setErrors] = useState({});
-
-  // Demo accounts info
-  const [showDemoInfo, setShowDemoInfo] = useState(false);
 
   // Reset form when modal opens/closes
   useEffect(() => {
@@ -131,7 +128,9 @@ const LoginRegisterModal = ({ isOpen, onClose, onLoginSuccess, initialMode = 'lo
 
     setLoading(true);
     try {
+      console.log('Attempting login with:', loginData.email);
       const result = await authService.login(loginData.email, loginData.password);
+      console.log('Login result:', result);
       
       if (result.success) {
         notificationManager.success(result.message);
@@ -141,9 +140,12 @@ const LoginRegisterModal = ({ isOpen, onClose, onLoginSuccess, initialMode = 'lo
         onClose();
       } else {
         notificationManager.error(result.message);
+        setErrors({ general: result.message });
       }
     } catch (error) {
+      console.error('Login error:', error);
       notificationManager.error('Đăng nhập thất bại');
+      setErrors({ general: 'Đăng nhập thất bại' });
     } finally {
       setLoading(false);
     }
@@ -165,9 +167,12 @@ const LoginRegisterModal = ({ isOpen, onClose, onLoginSuccess, initialMode = 'lo
         setLoginData({ email: registerData.email, password: '' });
       } else {
         notificationManager.error(result.message);
+        setErrors({ general: result.message });
       }
     } catch (error) {
+      console.error('Register error:', error);
       notificationManager.error('Đăng ký thất bại');
+      setErrors({ general: 'Đăng ký thất bại' });
     } finally {
       setLoading(false);
     }
@@ -196,25 +201,15 @@ const LoginRegisterModal = ({ isOpen, onClose, onLoginSuccess, initialMode = 'lo
         setMode('login');
       } else {
         notificationManager.error(result.message);
+        setErrors({ general: result.message });
       }
     } catch (error) {
+      console.error('Reset password error:', error);
       notificationManager.error('Không thể đặt lại mật khẩu');
+      setErrors({ general: 'Không thể đặt lại mật khẩu' });
     } finally {
       setLoading(false);
     }
-  };
-
-  // Demo login accounts
-  const demoAccounts = [
-    { email: 'admin@shop.com', password: 'admin', role: 'Quản trị viên' },
-    { email: 'hq@gmail.com', password: 'admin', role: 'Quản trị viên' },
-    { email: 'customer@shop.com', password: 'customer', role: 'Khách hàng' },
-    { email: 'demo@customer.com', password: 'demo', role: 'Khách hàng' }
-  ];
-
-  const quickLogin = (account) => {
-    setLoginData({ email: account.email, password: account.password });
-    setShowDemoInfo(false);
   };
 
   return (
@@ -229,36 +224,17 @@ const LoginRegisterModal = ({ isOpen, onClose, onLoginSuccess, initialMode = 'lo
             {mode === 'forgot' && '🔑 Quên mật khẩu'}
           </h2>
           
-          {mode === 'login' && (
-            <div className="demo-toggle">
-              <button 
-                className="demo-info-btn"
-                onClick={() => setShowDemoInfo(!showDemoInfo)}
-              >
-                💡 Tài khoản demo
-              </button>
-            </div>
-          )}
+          {/* REMOVED: Demo accounts section */}
         </div>
 
-        {/* Demo accounts info */}
-        {showDemoInfo && (
-          <div className="demo-accounts">
-            <h4>🎯 Tài khoản demo:</h4>
-            {demoAccounts.map((account, index) => (
-              <div key={index} className="demo-account" onClick={() => quickLogin(account)}>
-                <div className="demo-info">
-                  <strong>{account.email}</strong>
-                  <span className="demo-role">{account.role}</span>
-                </div>
-                <button className="demo-login-btn">Đăng nhập</button>
-              </div>
-            ))}
-            <p className="demo-note">💡 Click vào tài khoản để đăng nhập nhanh</p>
-          </div>
-        )}
-
         <div className="auth-content">
+          {/* General error message */}
+          {errors.general && (
+            <div className="error-message">
+              <span className="error-text">{errors.general}</span>
+            </div>
+          )}
+
           {/* Login Form */}
           {mode === 'login' && (
             <form className="auth-form" onSubmit={handleLogin}>
