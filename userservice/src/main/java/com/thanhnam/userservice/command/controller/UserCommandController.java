@@ -120,8 +120,7 @@ public class UserCommandController {
 
             AssignRoleCommand command = new AssignRoleCommand(
                     Integer.valueOf(request.get("maTaiKhoan").toString()),
-                    Integer.valueOf(request.get("maChucVu").toString()),
-                    (String) request.get("ten")
+                    Integer.valueOf(request.get("maChucVu").toString())
             );
 
             UserRoleAssignedEvent event = userCommandService.assignRole(command);

@@ -4,14 +4,13 @@ public class UserRoleAssignedEvent {
     
     private Integer maTaiKhoan;
     private Integer maChucVu;
-    private String ten;
     
     public UserRoleAssignedEvent() {}
     
-    public UserRoleAssignedEvent(Integer maTaiKhoan, Integer maChucVu, String ten) {
+    public UserRoleAssignedEvent(Integer maTaiKhoan, Integer maChucVu) {
         this.maTaiKhoan = maTaiKhoan;
         this.maChucVu = maChucVu;
-        this.ten = ten;
+
     }
     
     public Integer getMaTaiKhoan() {
@@ -30,11 +29,5 @@ public class UserRoleAssignedEvent {
         this.maChucVu = maChucVu;
     }
     
-    public String getTen() {
-        return ten;
-    }
-    
-    public void setTen(String ten) {
-        this.ten = ten;
-    }
-} 
+
+}

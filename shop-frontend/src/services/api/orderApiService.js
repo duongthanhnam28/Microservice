@@ -1,4 +1,4 @@
-const ORDER_API_BASE_URL = 'http://localhost:9004/api/v1/orders';
+const ORDER_API_BASE_URL = 'http://localhost:9003/api/v1/orders';
 
 class OrderApiService {
   async request(endpoint = '', options = {}) {

@@ -148,8 +148,7 @@ public class UserAggregate {
 
         return new UserRoleAssignedEvent(
                 command.getMaTaiKhoan(),
-                command.getMaChucVu(),
-                command.getTen()
+                command.getMaChucVu()
         );
     }
 

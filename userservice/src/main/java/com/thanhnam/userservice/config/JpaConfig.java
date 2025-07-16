@@ -12,9 +12,6 @@ import org.springframework.data.jpa.repository.config.EnableJpaRepositories;
 @EntityScan(basePackages = {
         "com.thanhnam.userservice.command.data",
         "com.thanhnam.userservice.query.model",
-        "org.axonframework.eventhandling.tokenstore",
-        "org.axonframework.modelling.saga.repository.jpa",
-        "org.axonframework.eventsourcing.eventstore.jpa"
 })
 public class JpaConfig {
 }

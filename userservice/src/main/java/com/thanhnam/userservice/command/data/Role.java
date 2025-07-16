@@ -17,6 +17,4 @@ public class Role {
     private Integer maCV;
     @Column(name = "TenChucVu")
     private String tenChucVu;
-
-
 } 
