@@ -1,9 +1,7 @@
-// UPDATED CustomerShop.js - Clean Implementation with Working Modal
+// UPDATED CustomerShop.js - Remove header authentication (now in Navigation)
 import React, { useState, useEffect } from 'react';
 import apiService from '../../services/api/apiService';
 import authService from '../../services/api/authService';
-import LoginRegisterModal from '../auth/LoginRegisterModal/LoginRegisterModal';
-import UserProfileMenu from '../auth/UserProfileMenu/UserProfileMenu';
 import { notificationManager } from '../layout/Notification/Notification';
 import EnhancedCheckout from '../order/EnhacedCheckout/EnhancedCheckout';
 import './CustomerShop.css';
@@ -22,9 +20,7 @@ const CustomerShop = ({ onModeChange, onLoginSuccess }) => {
   const [showCheckout, setShowCheckout] = useState(false);
   const [currentImageIndex, setCurrentImageIndex] = useState(0);
   
-  // Auth states
-  const [showAuthModal, setShowAuthModal] = useState(false);
-  const [authModalMode, setAuthModalMode] = useState('login');
+  // REMOVED: Auth states (now handled in Navigation)
   const [user, setUser] = useState(null);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
 
@@ -46,7 +42,7 @@ const CustomerShop = ({ onModeChange, onLoginSuccess }) => {
     { value: 'best-selling', label: 'Bán chạy' }
   ];
 
-  // Check authentication on mount
+  // Check authentication on mount (for cart/checkout functionality)
   useEffect(() => {
     try {
       if (authService.isUserAuthenticated()) {
@@ -209,49 +205,6 @@ const CustomerShop = ({ onModeChange, onLoginSuccess }) => {
       }
     });
 
-  // CLEAN: Handle login success
-  const handleLoginSuccess = (userData) => {
-    try {
-      setUser(userData);
-      setIsAuthenticated(true);
-      setShowAuthModal(false);
-      notificationManager.success(`Chào mừng ${userData.ten}!`);
-      
-      // Pass to parent App component
-      if (onLoginSuccess) {
-        onLoginSuccess(userData);
-      }
-    } catch (error) {
-      console.error('Login success handler error:', error);
-      notificationManager.error('Có lỗi xảy ra sau khi đăng nhập');
-    }
-  };
-
-  const handleLogout = () => {
-    try {
-      authService.logout();
-      setUser(null);
-      setIsAuthenticated(false);
-      notificationManager.success('Đã đăng xuất thành công');
-    } catch (error) {
-      console.error('Logout error:', error);
-      setUser(null);
-      setIsAuthenticated(false);
-    }
-  };
-
-  // CLEAN: Modal functions
-  const openAuthModal = (mode = 'login') => {
-    console.log('Opening auth modal with mode:', mode);
-    setAuthModalMode(mode);
-    setShowAuthModal(true);
-  };
-
-  const closeAuthModal = () => {
-    console.log('Closing auth modal');
-    setShowAuthModal(false);
-  };
-
   // Cart functions
   const addToCart = (product, quantity = 1) => {
     try {
@@ -375,6 +328,8 @@ const CustomerShop = ({ onModeChange, onLoginSuccess }) => {
     setSelectedProduct(null);
   };
 
+  // REMOVED: Authentication modal functions (handled by Navigation)
+
   // Checkout functions
   const handleStartCheckout = () => {
     try {
@@ -385,7 +340,6 @@ const CustomerShop = ({ onModeChange, onLoginSuccess }) => {
 
       if (!isAuthenticated) {
         notificationManager.info('Vui lòng đăng nhập để đặt hàng');
-        openAuthModal('login');
         return;
       }
 
@@ -423,13 +377,11 @@ const CustomerShop = ({ onModeChange, onLoginSuccess }) => {
 
   return (
     <div className="customer-shop">
-      {/* Header */}
-      <div className="shop-header compact">
-        <div className="header-content">
-          <div className="logo">
-            <h1>🛍️ OnlineShop</h1>
-          </div>
-          
+      {/* REMOVED: Header section (moved to Navigation component) */}
+
+      {/* Filters */}
+      <div className="shop-filters compact">
+        <div className="filters-content">
           <div className="header-search">
             <input
               type="text"
@@ -440,30 +392,25 @@ const CustomerShop = ({ onModeChange, onLoginSuccess }) => {
             <button>🔍</button>
           </div>
 
-          <div className="header-actions">
-            {isAuthenticated ? (
-              <UserProfileMenu 
-                user={user} 
-                onLogout={handleLogout}
-                onModeChange={onModeChange}
-              />
-            ) : (
-              <div className="auth-buttons">
-                <button 
-                  className="auth-btn"
-                  onClick={() => openAuthModal('login')}
-                >
-                  🔑 Đăng nhập
-                </button>
-                <button 
-                  className="auth-btn"
-                  onClick={() => openAuthModal('register')}
-                >
-                  📝 Đăng ký
-                </button>
-              </div>
-            )}
+          <select 
+            value={selectedCategory} 
+            onChange={(e) => setSelectedCategory(e.target.value)}
+          >
+            {categories.map(cat => (
+              <option key={cat.id} value={cat.id}>{cat.name}</option>
+            ))}
+          </select>
 
+          <select 
+            value={sortBy} 
+            onChange={(e) => setSortBy(e.target.value)}
+          >
+            {sortOptions.map(option => (
+              <option key={option.value} value={option.value}>{option.label}</option>
+            ))}
+          </select>
+
+          <div className="cart-quick-actions">
             <button 
               className="favorites-btn"
               onClick={() => notificationManager.info(`Bạn có ${favorites.length} sản phẩm yêu thích`)}
@@ -486,29 +433,6 @@ const CustomerShop = ({ onModeChange, onLoginSuccess }) => {
               💳 Đặt hàng
             </button>
           </div>
-        </div>
-      </div>
-
-      {/* Filters */}
-      <div className="shop-filters compact">
-        <div className="filters-content">
-          <select 
-            value={selectedCategory} 
-            onChange={(e) => setSelectedCategory(e.target.value)}
-          >
-            {categories.map(cat => (
-              <option key={cat.id} value={cat.id}>{cat.name}</option>
-            ))}
-          </select>
-
-          <select 
-            value={sortBy} 
-            onChange={(e) => setSortBy(e.target.value)}
-          >
-            {sortOptions.map(option => (
-              <option key={option.value} value={option.value}>{option.label}</option>
-            ))}
-          </select>
 
           <span className="results-count">
             {filteredAndSortedProducts.length} sản phẩm
@@ -624,12 +548,6 @@ const CustomerShop = ({ onModeChange, onLoginSuccess }) => {
                 </div>
 
                 <div className="product-meta">
-                  <div className="meta-item">
-                    <span>Tình trạng:</span>
-                    <strong className={(selectedProduct.soLuongTrongKho || 0) > 0 ? 'in-stock' : 'out-stock'}>
-                      {(selectedProduct.soLuongTrongKho || 0) > 0 ? `Còn ${selectedProduct.soLuongTrongKho} sản phẩm` : 'Hết hàng'}
-                    </strong>
-                  </div>
                   <div className="meta-item">
                     <span>Đã bán:</span>
                     <strong>{selectedProduct.soLuongDaBan || 0}</strong>
@@ -767,14 +685,6 @@ const CustomerShop = ({ onModeChange, onLoginSuccess }) => {
           onClose={() => setShowCheckout(false)}
         />
       )}
-
-      {/* Auth Modal - CLEAN Implementation */}
-      <LoginRegisterModal
-        isOpen={showAuthModal}
-        onClose={closeAuthModal}
-        onLoginSuccess={handleLoginSuccess}
-        initialMode={authModalMode}
-      />
     </div>
   );
 };

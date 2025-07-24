@@ -1,4 +1,6 @@
+// UPDATED SecurityConfig.java - Add CORS configuration
 package com.stu.account_service.config;
+
 import lombok.RequiredArgsConstructor;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -29,7 +31,10 @@ public class SecurityConfig {
     @Bean
     public SecurityFilterChain filterChain(HttpSecurity http) throws Exception {
         http
-                .csrf(csrf -> csrf.disable())
+                // FIXED: Enable CORS and disable CSRF
+                .cors(cors -> cors.configurationSource(corsConfigurationSource()))
+                .csrf(AbstractHttpConfigurer::disable)
+                
                 .authorizeHttpRequests(auth -> auth
                         // Authentication endpoints - public
                         .requestMatchers("/auth/login", "/auth/register", "/auth/refresh", "/auth/logout").permitAll()
@@ -39,6 +44,9 @@ public class SecurityConfig {
 
                         // Temporary public endpoint (có thể xóa sau)
                         .requestMatchers("/users/admin/addRoleToUser").permitAll()
+
+                        // OPTIONS requests - permitAll for CORS preflight
+                        .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
 
                         // Admin endpoints - cần quyền admin
                         .requestMatchers("/users/admin/**").hasRole("ADMIN")
@@ -60,38 +68,70 @@ public class SecurityConfig {
 
     @Bean
     public CorsConfigurationSource corsConfigurationSource() {
-        CorsConfiguration config = new CorsConfiguration();
-        config.setAllowedOriginPatterns(List.of("*"));
-        config.setAllowedMethods(Arrays.asList("GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"));
-        config.setAllowedHeaders(List.of("*"));
-        config.setAllowCredentials(true);
-        config.setMaxAge(3600L);
+        CorsConfiguration configuration = new CorsConfiguration();
+        
+        // FIXED: Allow specific origins in development
+        configuration.setAllowedOriginPatterns(List.of(
+            "http://localhost:3000",    // React dev server
+            "http://127.0.0.1:3000",
+            "http://localhost:3001",    // Alternative ports
+            "http://127.0.0.1:3001"
+        ));
+        
+        // Allow all common HTTP methods
+        configuration.setAllowedMethods(Arrays.asList(
+            "GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS", "HEAD"
+        ));
+        
+        // Allow all headers
+        configuration.setAllowedHeaders(List.of("*"));
+        
+        // Allow credentials (important for authentication)
+        configuration.setAllowCredentials(true);
+        
+        // Cache preflight requests for 1 hour
+        configuration.setMaxAge(3600L);
+        
+        // Expose common headers to frontend
+        configuration.setExposedHeaders(Arrays.asList(
+            "Authorization", 
+            "Content-Type", 
+            "X-Requested-With",
+            "Access-Control-Allow-Origin",
+            "Access-Control-Allow-Credentials"
+        ));
 
         UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
-        source.registerCorsConfiguration("/**", config);
+        source.registerCorsConfiguration("/**", configuration);
         return source;
     }
 }
 
 /*
-LUỒNG XỬ LÝ ĐƯỢC CẬP NHẬT:
+LUỒNG XỬ LÝ CORS ĐÃ CẬP NHẬT:
 
-1. PUBLIC ENDPOINTS (không cần token):
+1. CORS Configuration:
+   - Cho phép requests từ localhost:3000 (React app)
+   - Cho phép tất cả HTTP methods cần thiết
+   - Cho phép credentials để authentication hoạt động
+   - Cache preflight requests để tăng performance
+
+2. PUBLIC ENDPOINTS (không cần token):
    - /auth/** (login, register, refresh, logout)
    - GET /users/exists/** (cho order-service kiểm tra user tồn tại)
+   - OPTIONS /** (cho CORS preflight requests)
 
-2. ADMIN ENDPOINTS (cần token + role ADMIN):
+3. ADMIN ENDPOINTS (cần token + role ADMIN):
    - /users/admin/**
    - /roles/**
    - /permissions/**
 
-3. USER ENDPOINTS (cần token):
+4. USER ENDPOINTS (cần token):
    - /users/** (trừ admin và exists)
 
-4. VÍ DỤ LUỒNG XỬ LÝ:
-   - Order-service gọi GET /users/exists/2
-   → Không cần token → Trả về kết quả ngay lập tức
-
-   - Client gọi GET /users/admin/2
-   → Cần token + role ADMIN → JwtAuthenticationFilter kiểm tra → Nếu OK thì cho phép truy cập
+5. VÍ DỤ LUỒNG XỬ LÝ CORS:
+   - Browser gửi OPTIONS request trước (preflight)
+   → CORS config trả về headers cho phép
+   → Browser gửi actual request (POST /auth/login)
+   → Backend xử lý và trả về kết quả
 */

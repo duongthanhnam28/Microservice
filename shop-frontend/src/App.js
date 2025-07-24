@@ -1,7 +1,8 @@
-// FIXED App.js - No Navigation, Login-based redirect
+// FIXED App.js - No auto-login, proper navigation
 import React, { useEffect, useState } from 'react';
 import AdminLayout from './components/admin/AdminLayout/AdminLayout';
 import CustomerShop from './components/shop/CustomerShop';
+import Navigation from './components/layout/Navigation/Navigation';
 import authService from './services/api/authService';
 import { NotificationContainer } from './components/layout/Notification/Notification';
 import './App.css';
@@ -11,10 +12,10 @@ function App() {
   const [isLoading, setIsLoading] = useState(true);
   const [isTransitioning, setIsTransitioning] = useState(false);
 
-  // FIXED: Initialize app without auto-login
+  // FIXED: NO auto-login - just initialize app
   useEffect(() => {
     const initializeApp = () => {
-      // Always start with customer mode (no auto-login)
+      // Always start with customer mode
       setCurrentMode('customer');
       updateAppState('customer');
       
@@ -26,6 +27,7 @@ function App() {
       setIsLoading(false);
     };
 
+    // Short delay for smooth loading
     setTimeout(initializeApp, 300);
   }, []);
 
@@ -66,7 +68,7 @@ function App() {
     localStorage.setItem('appMode', mode);
   };
 
-  // FIXED: Handle mode change with auth check
+  // FIXED: Check auth and admin permissions
   const handleModeChange = (newMode) => {
     if (newMode === currentMode) return;
     
@@ -78,7 +80,7 @@ function App() {
       }
       
       const user = authService.getCurrentUser();
-      if (!user.isAdmin) {
+      if (!user || !user.isAdmin) {
         alert('Bạn không có quyền truy cập trang quản trị');
         return;
       }
@@ -128,7 +130,13 @@ function App() {
 
   return (
     <div className="App">
-      {/* FIXED: No Navigation component */}
+      {/* FIXED: Add Navigation component for customer mode only */}
+      {currentMode === 'customer' && (
+        <Navigation 
+          currentMode={currentMode}
+          onModeChange={handleModeChange}
+        />
+      )}
       
       {/* Main Content */}
       <main className={`main-content ${isTransitioning ? 'transitioning' : ''}`}>
