@@ -37,7 +37,7 @@ public class UserController {
     }
 
 
-    // Cấp thêm role cho úuer
+    // Cấp thêm role cho user
     @PostMapping("/admin/addRoleToUser")
     public ApiResponse<UserResponse> addRoleToUser(@RequestBody AddRoleToUserRequest request){
         return ApiResponse.<UserResponse>builder()
@@ -53,16 +53,16 @@ public class UserController {
                 .message("Xóa role thành công")
                 .build();
     }
-//
-//    @GetMapping("/{userId}/roles")
-//    public java.util.Set<String> getUserRoles(@PathVariable Long userId) {
-//        return userService.getUserRoles(userId);
-//    }
-//
-//    @GetMapping("/{userId}/permissions")
-//    public java.util.Set<String> getUserPermissions(@PathVariable Long userId) {
-//        return userService.getUserPermissions(userId);
-//    }
+
+   @GetMapping("/{userId}/roles")
+   public java.util.Set<String> getUserRoles(@PathVariable Long userId) {
+       return userService.getUserRoles(userId);
+   }
+
+   @GetMapping("/{userId}/permissions")
+   public java.util.Set<String> getUserPermissions(@PathVariable Long userId) {
+       return userService.getUserPermissions(userId);
+   }
 
     @GetMapping("/myInfo")
     public ApiResponse<UserResponse> getUserInfo(){
@@ -72,13 +72,24 @@ public class UserController {
                 .build();
 
     }
+    // Endpoint public để kiểm tra user tồn tại - KHÔNG yêu cầu authentication
+    @GetMapping("/exists/{userId}")
+    public ApiResponse<Boolean> checkUserExists(@PathVariable Long userId){
+        log.info("Checking if user exists with ID: {}", userId);
+        boolean exists = userService.userExistsById(userId);
+        return ApiResponse.<Boolean>builder()
+                .result(exists)
+                .message(exists ? "User exists" : "User not found")
+                .timestamp(LocalDateTime.now())
+                .build();
+    }
 
     // get one user by amdin
     @GetMapping("/admin/{userId}")
     public ApiResponse<UserResponse> getOneUser(@PathVariable Long userId){
         return ApiResponse.<UserResponse>builder()
                 .result(userService.getOneUser(userId))
-                .message("Láy thông tin người dùng")
+                .message("Lấy thông tin người dùng")
                 .build();
     }
 

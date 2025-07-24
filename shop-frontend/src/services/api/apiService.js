@@ -1,5 +1,5 @@
 // src/services/apiService.js - Sử dụng cấu trúc có sẵn
-const API_BASE_URL = 'http://localhost:9001/api';
+const API_BASE_URL = 'http://localhost:8000/api';
 
 class ApiService {
   // Helper method for making requests
@@ -8,8 +8,10 @@ class ApiService {
     const config = {
       headers: {
         'Content-Type': 'application/json',
+        'APIKEY': 'thanhnam',
         ...options.headers,
       },
+      credentials: 'include',
       ...options,
     };
 

@@ -1,4 +1,4 @@
-// UPDATED CustomerShop.js - Pass login success handler to parent
+// UPDATED CustomerShop.js - Clean Implementation with Working Modal
 import React, { useState, useEffect } from 'react';
 import apiService from '../../services/api/apiService';
 import authService from '../../services/api/authService';
@@ -209,7 +209,7 @@ const CustomerShop = ({ onModeChange, onLoginSuccess }) => {
       }
     });
 
-  // FIXED: Handle login success and pass to parent
+  // CLEAN: Handle login success
   const handleLoginSuccess = (userData) => {
     try {
       setUser(userData);
@@ -217,7 +217,7 @@ const CustomerShop = ({ onModeChange, onLoginSuccess }) => {
       setShowAuthModal(false);
       notificationManager.success(`Chào mừng ${userData.ten}!`);
       
-      // FIXED: Pass login success to parent App component
+      // Pass to parent App component
       if (onLoginSuccess) {
         onLoginSuccess(userData);
       }
@@ -240,9 +240,16 @@ const CustomerShop = ({ onModeChange, onLoginSuccess }) => {
     }
   };
 
+  // CLEAN: Modal functions
   const openAuthModal = (mode = 'login') => {
+    console.log('Opening auth modal with mode:', mode);
     setAuthModalMode(mode);
     setShowAuthModal(true);
+  };
+
+  const closeAuthModal = () => {
+    console.log('Closing auth modal');
+    setShowAuthModal(false);
   };
 
   // Cart functions
@@ -416,7 +423,7 @@ const CustomerShop = ({ onModeChange, onLoginSuccess }) => {
 
   return (
     <div className="customer-shop">
-      {/* Compact Header */}
+      {/* Header */}
       <div className="shop-header compact">
         <div className="header-content">
           <div className="logo">
@@ -482,7 +489,7 @@ const CustomerShop = ({ onModeChange, onLoginSuccess }) => {
         </div>
       </div>
 
-      {/* Compact Filters */}
+      {/* Filters */}
       <div className="shop-filters compact">
         <div className="filters-content">
           <select 
@@ -761,15 +768,13 @@ const CustomerShop = ({ onModeChange, onLoginSuccess }) => {
         />
       )}
 
-      {/* Auth Modal */}
-      {showAuthModal && (
-        <LoginRegisterModal
-          isOpen={showAuthModal}
-          onClose={() => setShowAuthModal(false)}
-          onLoginSuccess={handleLoginSuccess}
-          initialMode={authModalMode}
-        />
-      )}
+      {/* Auth Modal - CLEAN Implementation */}
+      <LoginRegisterModal
+        isOpen={showAuthModal}
+        onClose={closeAuthModal}
+        onLoginSuccess={handleLoginSuccess}
+        initialMode={authModalMode}
+      />
     </div>
   );
 };

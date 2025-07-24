@@ -90,6 +90,31 @@ public class UserService implements UserDetailsService {
     }
 
 
+    // Thêm method này vào UserService.java
+
+    /**
+     * Kiểm tra user có tồn tại theo ID hay không
+     * Method này được sử dụng bởi các service khác (như order-service)
+     * để validate user tồn tại mà không cần authentication
+     */
+    public boolean userExistsById(Long userId) {
+        try {
+            log.info("Checking if user exists with ID: {}", userId);
+
+            if (userId == null) {
+                log.warn("User ID is null");
+                return false;
+            }
+
+            boolean exists = userRepository.existsById(userId);
+            log.info("User with ID {} exists: {}", userId, exists);
+            return exists;
+
+        } catch (Exception e) {
+            log.error("Error checking if user exists with ID {}: {}", userId, e.getMessage(), e);
+            return false;
+        }
+    }
     /**
      * Tạo user với role cụ thể - chỉ dành cho ADMIN
      * @param request Thông tin đăng ký user bao gồm roles
@@ -196,7 +221,7 @@ public class UserService implements UserDetailsService {
     }
 
     //hàm gán thêm role cho user bỏi admin (dùng khi m̀ admin cần cấp thêm quyền cho user)
-    @PreAuthorize("hasRole('ADMIN')")
+//    @PreAuthorize("hasRole('ADMIN')")
     public UserResponse addRoleToUser(AddRoleToUserRequest request) {
         User user = userRepository.findById(request.getUserId())
                 .orElseThrow(() -> new AppException(ErrorCode.USER_NOT_EXISTED));
@@ -220,20 +245,20 @@ public class UserService implements UserDetailsService {
         return convertToUserResponse(user);
     }
 
-//    public java.util.Set<String> getUserRoles(Long userId) {
-//        User user = userRepository.findById(userId)
-//                .orElseThrow(() -> new AppException(ErrorCode.USER_NOT_EXISTED));
-//        return user.getRoles().stream().map(Role::getName).collect(java.util.stream.Collectors.toSet());
-//    }
-//
-//    public java.util.Set<String> getUserPermissions(Long userId) {
-//        User user = userRepository.findById(userId)
-//                .orElseThrow(() -> new AppException(ErrorCode.USER_NOT_EXISTED));
-//        return user.getRoles().stream()
-//                .flatMap(role -> role.getPermissions().stream())
-//                .map(com.stu.account_service.entity.Permission::getName)
-//                .collect(java.util.stream.Collectors.toSet());
-//    }
+   public java.util.Set<String> getUserRoles(Long userId) {
+       User user = userRepository.findById(userId)
+               .orElseThrow(() -> new AppException(ErrorCode.USER_NOT_EXISTED));
+       return user.getRoles().stream().map(Role::getName).collect(java.util.stream.Collectors.toSet());
+   }
+
+   public java.util.Set<String> getUserPermissions(Long userId) {
+       User user = userRepository.findById(userId)
+               .orElseThrow(() -> new AppException(ErrorCode.USER_NOT_EXISTED));
+       return user.getRoles().stream()
+               .flatMap(role -> role.getPermissions().stream())
+               .map(com.stu.account_service.entity.Permission::getName)
+               .collect(java.util.stream.Collectors.toSet());
+   }
 
     // người dùng tự lấy thông tin đăng nhập
     public UserResponse getMyInfor(){

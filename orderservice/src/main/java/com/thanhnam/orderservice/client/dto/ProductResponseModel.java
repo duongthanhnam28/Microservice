@@ -1,4 +1,4 @@
-package com.thanhnam.productservice.query.model;
+package com.thanhnam.orderservice.client.dto;
 
 import lombok.*;
 
@@ -22,4 +22,4 @@ public class ProductResponseModel {
     private Long giaTien;
     private Integer maHang;
     private Integer maDanhMuc;
-}
+} 

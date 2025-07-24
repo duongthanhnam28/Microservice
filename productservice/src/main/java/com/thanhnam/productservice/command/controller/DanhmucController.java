@@ -11,7 +11,7 @@ import org.springframework.web.bind.annotation.*;
 
 @RestController
 @RequestMapping("/api/v1/categories")
-@CrossOrigin(origins = {"http://localhost:3000", "http://127.0.0.1:3000"}, maxAge = 3600)
+@CrossOrigin(origins = {"http://localhost:3000","http://localhost:8000"}, maxAge = 3600)
 public class DanhmucController {
     @Autowired
     private DanhmucService danhmucService;

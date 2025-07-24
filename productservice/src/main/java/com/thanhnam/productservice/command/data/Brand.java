@@ -1,8 +1,18 @@
 package com.thanhnam.productservice.command.data;
 
 import jakarta.persistence.*;
+import lombok.AllArgsConstructor;
+import lombok.Getter;
+import lombok.NoArgsConstructor;
+import lombok.Setter;
+
+import java.util.List;
 
 @Entity
+@Getter
+@Setter
+@NoArgsConstructor
+@AllArgsConstructor
 @Table(name = "HANGSANXUAT")
 public class Brand {
 
@@ -14,27 +24,6 @@ public class Brand {
     @Column(name = "TenHang", length = 20)
     private String tenHang;
 
-    // Constructors
-    public Brand() {}
-
-    public Brand(String tenHang) {
-        this.tenHang = tenHang;
-    }
-
-    // Getters and Setters
-    public Integer getMaHang() {
-        return maHang;
-    }
-
-    public void setMaHang(Integer maHang) {
-        this.maHang = maHang;
-    }
-
-    public String getTenHang() {
-        return tenHang;
-    }
-
-    public void setTenHang(String tenHang) {
-        this.tenHang = tenHang;
-    }
+    @OneToMany(mappedBy = "maHang")
+    private List<Product> products;
 }

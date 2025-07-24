@@ -17,11 +17,12 @@
         <processorPath useClasspath="false">
           <entry name="$MAVEN_REPOSITORY$/org/projectlombok/lombok/1.18.38/lombok-1.18.38.jar" />
         </processorPath>
+        <module name="cart-service" />
+        <module name="userservice" />
+        <module name="productservice" />
         <module name="account-service" />
         <module name="notificationservice" />
-        <module name="userservice" />
         <module name="storageservice" />
-        <module name="productservice" />
         <module name="orderservice" />
       </profile>
     </annotationProcessing>
@@ -36,6 +37,7 @@
       <module name="account-service" options="-parameters" />
       <module name="apigateway" options="-parameters" />
       <module name="bookservice" options="-parameters" />
+      <module name="cart-service" options="-parameters" />
       <module name="commonservice" options="-parameters" />
       <module name="discoveryservice" options="-parameters" />
       <module name="employeeservice" options="-parameters" />

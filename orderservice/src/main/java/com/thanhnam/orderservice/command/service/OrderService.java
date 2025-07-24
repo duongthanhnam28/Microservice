@@ -5,6 +5,10 @@ import com.thanhnam.orderservice.command.data.OrderRepository;
 import com.thanhnam.orderservice.command.data.OrderDetail;
 import com.thanhnam.orderservice.command.data.OrderDetailRepository;
 import com.thanhnam.orderservice.command.model.CreateOrderRequest;
+import com.thanhnam.orderservice.client.clients.AccountServiceClient;
+import com.thanhnam.orderservice.client.clients.ProductServiceClient;
+import com.thanhnam.orderservice.client.dto.ProductResponseModel;
+import com.thanhnam.orderservice.client.dto.UserResponse;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -12,14 +16,17 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDate;
+import com.thanhnam.orderservice.client.dto.ApiResponse;
 
 @Service
-@RequiredArgsConstructor
 @Slf4j
+@RequiredArgsConstructor
 public class OrderService {
     private final OrderRepository orderRepository;
     private final OrderDetailRepository orderDetailRepository;
     private final JdbcTemplate jdbcTemplate;
+    private final ProductServiceClient productServiceClient;
+    private final AccountServiceClient accountServiceClient;
 
     @Transactional
     public Order createOrder(CreateOrderRequest request) {
@@ -31,9 +38,13 @@ public class OrderService {
                 throw new IllegalArgumentException("User ID is required");
             }
 
-            // Validate userId exists in TAIKHOAN table
-            if (!userExists(request.getUserId())) {
-                throw new IllegalArgumentException("User ID " + request.getUserId() + " does not exist in TAIKHOAN table");
+            // Validate userId exists via account-service using NEW endpoint
+            if (!userExists(request.getUserId().longValue())) {
+                throw new IllegalArgumentException("User ID " + request.getUserId() + " does not exist in account-service");
+            }
+
+            if (request.getItems() == null || request.getItems().isEmpty()) {
+                throw new IllegalArgumentException("Order must contain at least one product");
             }
 
             // Tạo order mới
@@ -47,16 +58,14 @@ public class OrderService {
             log.info("Order created with ID: {}", savedOrder.getOrderId());
 
             // Lưu chi tiết đơn hàng
-            if (request.getItems() != null && !request.getItems().isEmpty()) {
-                for (CreateOrderRequest.OrderItem item : request.getItems()) {
-                    OrderDetail detail = OrderDetail.builder()
-                            .orderId(savedOrder.getOrderId())
-                            .productId(item.getProductId())
-                            .quantity(item.getQuantity())
-                            .build();
-                    orderDetailRepository.save(detail);
-                    log.info("Saved order detail: Product {}, Quantity {}", item.getProductId(), item.getQuantity());
-                }
+            for (CreateOrderRequest.OrderItem item : request.getItems()) {
+                OrderDetail detail = OrderDetail.builder()
+                        .orderId(savedOrder.getOrderId())
+                        .productId(item.getProductId())
+                        .quantity(item.getQuantity())
+                        .build();
+                orderDetailRepository.save(detail);
+                log.info("Saved order detail: Product {}, Quantity {}", item.getProductId(), item.getQuantity());
             }
 
             log.info("Order creation completed successfully");
@@ -68,15 +77,42 @@ public class OrderService {
         }
     }
 
-    private boolean userExists(Integer userId) {
+    /**
+     * Kiểm tra user tồn tại sử dụng endpoint PUBLIC /users/exists/{id}
+     * Không cần authentication
+     */
+    private boolean userExists(Long userId) {
         try {
-            String sql = "SELECT COUNT(*) FROM TAIKHOAN WHERE MaTaiKhoan = ?";
-            Integer count = jdbcTemplate.queryForObject(sql, Integer.class, userId);
-            boolean exists = count != null && count > 0;
-            log.info("User {} exists: {}", userId, exists);
+            log.info("Checking if user exists with ID: {}", userId);
+
+            // Sử dụng endpoint mới /users/exists/{id}
+            ApiResponse<Boolean> response = accountServiceClient.checkUserExists(userId);
+
+            if (response == null) {
+                log.warn("Received null response from account-service for user ID: {}", userId);
+                return false;
+            }
+
+            Boolean exists = response.getResult();
+            if (exists == null) {
+                log.warn("Received null result from account-service for user ID: {}", userId);
+                return false;
+            }
+
+            log.info("User existence check for ID {}: {}", userId, exists);
             return exists;
+
+        } catch (feign.FeignException.NotFound e) {
+            log.warn("User with ID {} not found in account-service (404): {}", userId, e.getMessage());
+            return false;
+
+        } catch (feign.FeignException e) {
+            log.error("Feign error when calling account-service for user ID {}: Status={}, Message={}",
+                    userId, e.status(), e.getMessage());
+            return false;
+
         } catch (Exception e) {
-            log.error("Error checking user existence: ", e);
+            log.error("Unexpected error when checking user ID {}: {}", userId, e.getMessage(), e);
             return false;
         }
     }
@@ -120,5 +156,9 @@ public class OrderService {
             log.error("Error updating order status: ", e);
             throw new RuntimeException("Failed to update order status: " + e.getMessage(), e);
         }
+    }
+
+    public ProductResponseModel getProductInfo(Integer productId) {
+        return productServiceClient.getProductById(productId);
     }
 }

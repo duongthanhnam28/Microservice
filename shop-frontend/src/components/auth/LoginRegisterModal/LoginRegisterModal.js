@@ -1,12 +1,15 @@
-// FIXED LoginRegisterModal.js - Remove demo accounts functionality
+// Complete LoginRegisterModal.js - Full Featured
 import React, { useState, useEffect } from 'react';
+import ReactDOM from 'react-dom';
 import authService from '../../../services/api/authService';
 import { notificationManager } from '../../layout/Notification/Notification';
 import './LoginRegisterModal.css';
 
 const LoginRegisterModal = ({ isOpen, onClose, onLoginSuccess, initialMode = 'login' }) => {
-  const [mode, setMode] = useState(initialMode); // 'login', 'register', 'forgot'
+  const [mode, setMode] = useState(initialMode);
   const [loading, setLoading] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   
   // Login form state
   const [loginData, setLoginData] = useState({
@@ -31,6 +34,22 @@ const LoginRegisterModal = ({ isOpen, onClose, onLoginSuccess, initialMode = 'lo
   // Validation errors
   const [errors, setErrors] = useState({});
 
+  // Prevent background scroll when modal is open
+  useEffect(() => {
+    if (isOpen) {
+      document.body.style.overflow = 'hidden';
+      document.body.classList.add('modal-open');
+    } else {
+      document.body.style.overflow = 'auto';
+      document.body.classList.remove('modal-open');
+    }
+
+    return () => {
+      document.body.style.overflow = 'auto';
+      document.body.classList.remove('modal-open');
+    };
+  }, [isOpen]);
+
   // Reset form when modal opens/closes
   useEffect(() => {
     if (isOpen) {
@@ -42,10 +61,12 @@ const LoginRegisterModal = ({ isOpen, onClose, onLoginSuccess, initialMode = 'lo
       });
       setForgotEmail('');
       setErrors({});
+      setShowPassword(false);
+      setShowConfirmPassword(false);
     }
   }, [isOpen, initialMode]);
 
-  if (!isOpen) return null;
+  
 
   // Handle input changes
   const handleLoginChange = (field, value) => {
@@ -212,8 +233,27 @@ const LoginRegisterModal = ({ isOpen, onClose, onLoginSuccess, initialMode = 'lo
     }
   };
 
-  return (
-    <div className="auth-modal-overlay" onClick={onClose}>
+  // Handle backdrop click
+  const handleBackdropClick = (e) => {
+    if (e.target === e.currentTarget) {
+      onClose();
+    }
+  };
+
+  // Handle escape key
+  useEffect(() => {
+    const handleEscape = (e) => {
+      if (e.key === 'Escape' && isOpen) {
+        onClose();
+      }
+    };
+
+    document.addEventListener('keydown', handleEscape);
+    return () => document.removeEventListener('keydown', handleEscape);
+  }, [isOpen, onClose]);
+
+  const modalContent = (
+    <div className="auth-modal-overlay" onClick={handleBackdropClick}>
       <div className="auth-modal" onClick={(e) => e.stopPropagation()}>
         <button className="auth-close-btn" onClick={onClose}>✕</button>
         
@@ -223,8 +263,6 @@ const LoginRegisterModal = ({ isOpen, onClose, onLoginSuccess, initialMode = 'lo
             {mode === 'register' && '📝 Đăng ký'}
             {mode === 'forgot' && '🔑 Quên mật khẩu'}
           </h2>
-          
-          {/* REMOVED: Demo accounts section */}
         </div>
 
         <div className="auth-content">
@@ -247,25 +285,40 @@ const LoginRegisterModal = ({ isOpen, onClose, onLoginSuccess, initialMode = 'lo
                   className={errors.email ? 'error' : ''}
                   placeholder="Nhập email của bạn"
                   disabled={loading}
+                  autoComplete="email"
                 />
                 {errors.email && <span className="error-text">{errors.email}</span>}
               </div>
 
               <div className="form-group">
                 <label>Mật khẩu</label>
-                <input
-                  type="password"
-                  value={loginData.password}
-                  onChange={(e) => handleLoginChange('password', e.target.value)}
-                  className={errors.password ? 'error' : ''}
-                  placeholder="Nhập mật khẩu"
-                  disabled={loading}
-                />
+                <div className="password-group">
+                  <input
+                    type={showPassword ? 'text' : 'password'}
+                    value={loginData.password}
+                    onChange={(e) => handleLoginChange('password', e.target.value)}
+                    className={errors.password ? 'error' : ''}
+                    placeholder="Nhập mật khẩu"
+                    disabled={loading}
+                    autoComplete="current-password"
+                  />
+                  <button
+                    type="button"
+                    className="password-toggle"
+                    onClick={() => setShowPassword(!showPassword)}
+                  >
+                    {showPassword ? '🙈' : '👁️'}
+                  </button>
+                </div>
                 {errors.password && <span className="error-text">{errors.password}</span>}
               </div>
 
-              <button type="submit" className="auth-submit-btn" disabled={loading}>
-                {loading ? '🔄 Đang đăng nhập...' : '🚀 Đăng nhập'}
+              <button 
+                type="submit" 
+                className={`auth-submit-btn ${loading ? 'loading' : ''}`}
+                disabled={loading}
+              >
+                {loading ? 'Đang đăng nhập...' : '🚀 Đăng nhập'}
               </button>
 
               <div className="auth-links">
@@ -300,6 +353,7 @@ const LoginRegisterModal = ({ isOpen, onClose, onLoginSuccess, initialMode = 'lo
                     className={errors.ten ? 'error' : ''}
                     placeholder="Nhập họ và tên"
                     disabled={loading}
+                    autoComplete="name"
                   />
                   {errors.ten && <span className="error-text">{errors.ten}</span>}
                 </div>
@@ -325,6 +379,7 @@ const LoginRegisterModal = ({ isOpen, onClose, onLoginSuccess, initialMode = 'lo
                     className={errors.email ? 'error' : ''}
                     placeholder="example@email.com"
                     disabled={loading}
+                    autoComplete="email"
                   />
                   {errors.email && <span className="error-text">{errors.email}</span>}
                 </div>
@@ -338,6 +393,7 @@ const LoginRegisterModal = ({ isOpen, onClose, onLoginSuccess, initialMode = 'lo
                     className={errors.sdt ? 'error' : ''}
                     placeholder="0987654321"
                     disabled={loading}
+                    autoComplete="tel"
                   />
                   {errors.sdt && <span className="error-text">{errors.sdt}</span>}
                 </div>
@@ -345,13 +401,13 @@ const LoginRegisterModal = ({ isOpen, onClose, onLoginSuccess, initialMode = 'lo
 
               <div className="form-group">
                 <label>Địa chỉ *</label>
-                <input
-                  type="text"
+                <textarea
                   value={registerData.diaChi}
                   onChange={(e) => handleRegisterChange('diaChi', e.target.value)}
                   className={errors.diaChi ? 'error' : ''}
                   placeholder="Nhập địa chỉ của bạn"
                   disabled={loading}
+                  rows="2"
                 />
                 {errors.diaChi && <span className="error-text">{errors.diaChi}</span>}
               </div>
@@ -359,33 +415,57 @@ const LoginRegisterModal = ({ isOpen, onClose, onLoginSuccess, initialMode = 'lo
               <div className="form-row">
                 <div className="form-group">
                   <label>Mật khẩu *</label>
-                  <input
-                    type="password"
-                    value={registerData.matKhau}
-                    onChange={(e) => handleRegisterChange('matKhau', e.target.value)}
-                    className={errors.matKhau ? 'error' : ''}
-                    placeholder="Ít nhất 6 ký tự"
-                    disabled={loading}
-                  />
+                  <div className="password-group">
+                    <input
+                      type={showPassword ? 'text' : 'password'}
+                      value={registerData.matKhau}
+                      onChange={(e) => handleRegisterChange('matKhau', e.target.value)}
+                      className={errors.matKhau ? 'error' : ''}
+                      placeholder="Ít nhất 6 ký tự"
+                      disabled={loading}
+                      autoComplete="new-password"
+                    />
+                    <button
+                      type="button"
+                      className="password-toggle"
+                      onClick={() => setShowPassword(!showPassword)}
+                    >
+                      {showPassword ? '🙈' : '👁️'}
+                    </button>
+                  </div>
                   {errors.matKhau && <span className="error-text">{errors.matKhau}</span>}
                 </div>
 
                 <div className="form-group">
                   <label>Xác nhận mật khẩu *</label>
-                  <input
-                    type="password"
-                    value={registerData.confirmPassword}
-                    onChange={(e) => handleRegisterChange('confirmPassword', e.target.value)}
-                    className={errors.confirmPassword ? 'error' : ''}
-                    placeholder="Nhập lại mật khẩu"
-                    disabled={loading}
-                  />
+                  <div className="password-group">
+                    <input
+                      type={showConfirmPassword ? 'text' : 'password'}
+                      value={registerData.confirmPassword}
+                      onChange={(e) => handleRegisterChange('confirmPassword', e.target.value)}
+                      className={errors.confirmPassword ? 'error' : ''}
+                      placeholder="Nhập lại mật khẩu"
+                      disabled={loading}
+                      autoComplete="new-password"
+                    />
+                    <button
+                      type="button"
+                      className="password-toggle"
+                      onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                    >
+                      {showConfirmPassword ? '🙈' : '👁️'}
+                    </button>
+                  </div>
                   {errors.confirmPassword && <span className="error-text">{errors.confirmPassword}</span>}
                 </div>
               </div>
 
-              <button type="submit" className="auth-submit-btn" disabled={loading}>
-                {loading ? '🔄 Đang đăng ký...' : '✨ Đăng ký'}
+              <button 
+                type="submit" 
+                className={`auth-submit-btn ${loading ? 'loading' : ''}`}
+                disabled={loading}
+              >
+                {loading ? 'Đang đăng ký...' : '✨ Đăng ký'}
               </button>
 
               <div className="auth-links">
@@ -403,8 +483,22 @@ const LoginRegisterModal = ({ isOpen, onClose, onLoginSuccess, initialMode = 'lo
           {/* Forgot Password Form */}
           {mode === 'forgot' && (
             <form className="auth-form" onSubmit={handleForgotPassword}>
-              <div className="forgot-info">
-                <p>💌 Nhập email của bạn và chúng tôi sẽ gửi link đặt lại mật khẩu.</p>
+              <div style={{
+                textAlign: 'center',
+                marginBottom: '1.5rem',
+                padding: '1rem',
+                background: '#f0f9ff',
+                borderRadius: '8px',
+                border: '1px solid #bae6fd'
+              }}>
+                <p style={{
+                  margin: 0,
+                  color: '#0369a1',
+                  fontSize: '0.9rem',
+                  lineHeight: 1.5
+                }}>
+                  💌 Nhập email của bạn và chúng tôi sẽ gửi link đặt lại mật khẩu.
+                </p>
               </div>
 
               <div className="form-group">
@@ -416,12 +510,17 @@ const LoginRegisterModal = ({ isOpen, onClose, onLoginSuccess, initialMode = 'lo
                   className={errors.email ? 'error' : ''}
                   placeholder="Nhập email của bạn"
                   disabled={loading}
+                  autoComplete="email"
                 />
                 {errors.email && <span className="error-text">{errors.email}</span>}
               </div>
 
-              <button type="submit" className="auth-submit-btn" disabled={loading}>
-                {loading ? '🔄 Đang gửi...' : '📧 Gửi link đặt lại'}
+              <button 
+                type="submit" 
+                className={`auth-submit-btn ${loading ? 'loading' : ''}`}
+                disabled={loading}
+              >
+                {loading ? 'Đang gửi...' : '📧 Gửi link đặt lại'}
               </button>
 
               <div className="auth-links">
@@ -439,6 +538,8 @@ const LoginRegisterModal = ({ isOpen, onClose, onLoginSuccess, initialMode = 'lo
       </div>
     </div>
   );
+
+  return ReactDOM.createPortal(modalContent, document.body);
 };
 
 export default LoginRegisterModal;

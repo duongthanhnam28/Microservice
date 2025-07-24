@@ -31,8 +31,24 @@ public class SecurityConfig {
         http
                 .csrf(csrf -> csrf.disable())
                 .authorizeHttpRequests(auth -> auth
+                        // Authentication endpoints - public
                         .requestMatchers("/auth/login", "/auth/register", "/auth/refresh", "/auth/logout").permitAll()
-                        .requestMatchers("/error").permitAll()
+
+                        // User existence check - public (cho order-service gọi)
+                        .requestMatchers(HttpMethod.GET, "/users/exists/**").permitAll()
+
+                        // Temporary public endpoint (có thể xóa sau)
+                        .requestMatchers("/users/admin/addRoleToUser").permitAll()
+
+                        // Admin endpoints - cần quyền admin
+                        .requestMatchers("/users/admin/**").hasRole("ADMIN")
+                        .requestMatchers("/roles/**").hasRole("ADMIN")
+                        .requestMatchers("/permissions/**").hasRole("ADMIN")
+
+                        // User endpoints - cần authentication (PHẢI ĐẶT SAU /users/exists/**)
+                        .requestMatchers("/users/**").authenticated()
+
+                        // Tất cả request khác cần authentication
                         .anyRequest().authenticated()
                 )
                 .exceptionHandling(ex -> ex.authenticationEntryPoint(jwtAuthenticationEntryPoint))
@@ -56,43 +72,26 @@ public class SecurityConfig {
         return source;
     }
 }
+
 /*
-LUỒNG XỬ LÝ: Gửi http request đến spring security sẽ xử lý như sau:
-KHi SecurityFilterChain được kích hoạt nó sẽ khởi tạo chuỗi filter mặc định
-    csrf().disable() – tắt bảo vệ CSRF (vì dùng JWT, không dùng cookie)
+LUỒNG XỬ LÝ ĐƯỢC CẬP NHẬT:
 
-    sessionManagement().sessionCreationPolicy(STATELESS) – không dùng session
+1. PUBLIC ENDPOINTS (không cần token):
+   - /auth/** (login, register, refresh, logout)
+   - GET /users/exists/** (cho order-service kiểm tra user tồn tại)
 
-    authorizeHttpRequests() – xác định quyền truy cập các endpoint
+2. ADMIN ENDPOINTS (cần token + role ADMIN):
+   - /users/admin/**
+   - /roles/**
+   - /permissions/**
 
-    addFilterBefore(jwtAuthFilter, UsernamePasswordAuthenticationFilter.class) – thêm filter tùy chỉnh kiểm tra JWT
+3. USER ENDPOINTS (cần token):
+   - /users/** (trừ admin và exists)
 
-    exceptionHandling().authenticationEntryPoint(jwtAuthenticationEntryPoint) – gán entry point xử lý lỗi xác thự
+4. VÍ DỤ LUỒNG XỬ LÝ:
+   - Order-service gọi GET /users/exists/2
+   → Không cần token → Trả về kết quả ngay lập tức
 
- */
-
-// VÍ DỤ CỤ THỂ
-
-/// //////
-/*
-1. Ví dụ login ( chỉ gửi username + password)
-    --> SecurityFilterChain sẽ thực hiện lần lượt các bộ lọc
-    + csrf().disable() -->ở đây không kích hoạt
-    + kiển tra session
-    + kiểm tra quyền truy cập các enpoint (Nếu không có quyền truy cập endpoint thì không thể thực hiện bước tiếp theo)
-    + Sau đó mới gọi AuthenticationManager + AuthenticationProvider
-    + Kết quả: Trả về một token
- */
-
-/* ví dụ khi logout mà cần gửi kèm token để xác thực
-    +     + csrf().disable() -->ở đây không kích hoạt
-    + kiển tra session
-    + kiểm tra quyền truy cập các enpoint (Nếu không có quyền truy cập endpoint thì không thể thực hiện bước tiếp theo)
-    + Gọi đến JwtAuthenticationFilter để:
-        . Giải mã, trích xuất thông tin từ token
-        . Kiểm tra xem token có hợp lệ không
-        . Nếu hợp lệ gán cho SecurityContextHolder -->  thực hiện các nhiệm vụ theo yêu cầu ( như logout)
-        . Nếu không hợp lệ  --> Goị đến JwtAuthenticationEntryPoint --> trả về lỗi 401
- */
-
-
+   - Client gọi GET /users/admin/2
+   → Cần token + role ADMIN → JwtAuthenticationFilter kiểm tra → Nếu OK thì cho phép truy cập
+*/
