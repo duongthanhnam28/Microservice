@@ -1,11 +1,34 @@
-// FIXED authService.js - Properly integrate with account-service
+// FIXED authService.js - Properly update profile and logout
 class AuthService {
   constructor() {
     this.API_URL = 'http://localhost:9002'; // Account service port
     this.currentUser = null;
     this.accessToken = null;
     this.refreshToken = null;
+    this.listeners = []; // Add listeners for auth state changes
     this.initializeFromStorage();
+  }
+
+  // Add listener for auth state changes
+  addAuthStateListener(listener) {
+    this.listeners.push(listener);
+    return () => {
+      this.listeners = this.listeners.filter(l => l !== listener);
+    };
+  }
+
+  // Notify all listeners of auth state changes
+  notifyListeners() {
+    this.listeners.forEach(listener => {
+      try {
+        listener({
+          isAuthenticated: this.isUserAuthenticated(),
+          user: this.currentUser
+        });
+      } catch (error) {
+        console.error('Error in auth listener:', error);
+      }
+    });
   }
 
   // Initialize from localStorage
@@ -77,6 +100,7 @@ class AuthService {
         if (userInfo) {
           this.currentUser = userInfo;
           this.saveTokens();
+          this.notifyListeners(); // Notify listeners of login
           
           return {
             success: true,
@@ -187,11 +211,13 @@ class AuthService {
       if (data.code === 1000) {
         const userInfo = {
           id: data.result.id,
-          ten: data.result.username, // Map username to ten
+          ten: (data.result.firstName || '') + ' ' + (data.result.lastName || ''), // Combine first and last name
           email: data.result.email,
           sdt: data.result.phoneNumber || '',
-          diaChi: data.result.address || '',
+          diaChi: '', // Address not available in current backend
           username: data.result.username,
+          firstName: data.result.firstName || '',
+          lastName: data.result.lastName || '',
           roles: data.result.roles || [],
           isAdmin: this.checkIfAdmin(data.result.roles)
         };
@@ -207,26 +233,53 @@ class AuthService {
     }
   }
 
-  // Logout method - integrates with Account Service /auth/logout
+  // FIXED: Logout method - integrates with Account Service /auth/logout and notifies listeners
   async logout() {
     try {
+      console.log('=== AUTH SERVICE LOGOUT ===');
+      
       if (this.accessToken && this.refreshToken) {
-        await fetch(`${this.API_URL}/auth/logout`, {
-          method: 'POST',
-          headers: {
-            'Authorization': `Bearer ${this.accessToken}`,
-            'Content-Type': 'application/json'
-          },
-          body: JSON.stringify({
-            refreshToken: this.refreshToken
-          })
-        });
+        try {
+          const response = await fetch(`${this.API_URL}/auth/logout`, {
+            method: 'POST',
+            headers: {
+              'Authorization': `Bearer ${this.accessToken}`,
+              'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+              refreshToken: this.refreshToken
+            })
+          });
+          
+          console.log('Logout API response status:', response.status);
+          
+          if (response.ok) {
+            const data = await response.json();
+            console.log('Logout API response:', data);
+          }
+        } catch (apiError) {
+          console.error('Logout API error:', apiError);
+          // Continue with local logout even if API fails
+        }
       }
-    } catch (error) {
-      console.error('Logout API error:', error);
-    } finally {
+      
+      // Always clear tokens and notify listeners
       this.clearTokens();
-      return { success: true, message: 'Đăng xuất thành công' };
+      this.notifyListeners(); // Notify listeners of logout
+      
+      return { 
+        success: true, 
+        message: 'Đăng xuất thành công' 
+      };
+    } catch (error) {
+      console.error('Logout error:', error);
+      // Still clear tokens on error
+      this.clearTokens();
+      this.notifyListeners();
+      return { 
+        success: true, 
+        message: 'Đăng xuất thành công' 
+      };
     }
   }
 
@@ -262,6 +315,7 @@ class AuthService {
     } catch (error) {
       console.error('Refresh token error:', error);
       this.clearTokens();
+      this.notifyListeners();
       return false;
     }
   }
@@ -329,11 +383,97 @@ class AuthService {
       } else {
         // Refresh failed, clear tokens
         this.clearTokens();
+        this.notifyListeners();
         return null;
       }
     }
 
     return response;
+  }
+
+  // FIXED: Update profile method with proper backend integration
+  async updateProfile(userData) {
+    try {
+      console.log('=== UPDATE PROFILE ===');
+      console.log('Update data:', userData);
+      
+      if (!this.isUserAuthenticated()) {
+        return {
+          success: false,
+          message: 'Vui lòng đăng nhập'
+        };
+      }
+
+      // FIXED: Now using the actual backend endpoint PUT /users/profile
+      const response = await fetch(`${this.API_URL}/users/profile`, {
+        method: 'PUT',
+        headers: {
+          'Authorization': `Bearer ${this.accessToken}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          firstName: userData.ten?.split(' ')[0] || '',
+          lastName: userData.ten?.split(' ').slice(1).join(' ') || '',
+          phoneNumber: userData.sdt || ''
+        })
+      });
+
+      console.log('Update profile response status:', response.status);
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        console.error('Update profile failed:', errorData);
+        return {
+          success: false,
+          message: errorData.message || 'Cập nhật thông tin thất bại'
+        };
+      }
+
+      const data = await response.json();
+      console.log('Update profile response:', data);
+      
+      if (data.code === 1000) {
+        // Refresh user info from server to get updated data
+        const updatedUserInfo = await this.fetchUserInfo();
+        if (updatedUserInfo) {
+          this.currentUser = updatedUserInfo;
+          this.saveTokens();
+          this.notifyListeners();
+          return {
+            success: true,
+            message: data.message || 'Cập nhật thông tin thành công',
+            data: this.currentUser
+          };
+        } else {
+          // Fallback to updating local data if fetchUserInfo fails
+          const updatedUser = { 
+            ...this.currentUser, 
+            ...userData 
+          };
+          
+          this.currentUser = updatedUser;
+          this.saveTokens();
+          this.notifyListeners();
+
+          return {
+            success: true,
+            message: data.message || 'Cập nhật thông tin thành công',
+            data: this.currentUser
+          };
+        }
+      } else {
+        return {
+          success: false,
+          message: data.message || 'Cập nhật thông tin thất bại'
+        };
+      }
+    } catch (error) {
+      console.error('Profile update error:', error);
+      return {
+        success: false,
+        message: 'Cập nhật thông tin thất bại'
+      };
+    }
   }
 
   // Utility methods
@@ -370,8 +510,6 @@ class AuthService {
     const hasTokens = !!(this.accessToken && this.refreshToken);
     const hasUser = !!this.currentUser;
     
-    console.log('Auth check:', { hasTokens, hasUser, currentUser: this.currentUser });
-    
     return hasTokens && hasUser;
   }
 
@@ -395,40 +533,6 @@ class AuthService {
     if (!phone || typeof phone !== 'string') return false;
     const phoneRegex = /^(\+84|0)[0-9]{9,10}$/;
     return phoneRegex.test(phone.trim());
-  }
-
-  // FIXED: Update profile method with proper backend integration
-  async updateProfile(userData) {
-    try {
-      if (!this.isUserAuthenticated()) {
-        return {
-          success: false,
-          message: 'Vui lòng đăng nhập'
-        };
-      }
-
-      // For now, just update local storage since we don't have update profile endpoint
-      // In a real application, you would call something like PUT /users/profile
-      const updatedUser = { 
-        ...this.currentUser, 
-        ...userData 
-      };
-      
-      this.currentUser = updatedUser;
-      this.saveTokens();
-
-      return {
-        success: true,
-        message: 'Cập nhật thông tin thành công',
-        data: this.currentUser
-      };
-    } catch (error) {
-      console.error('Profile update error:', error);
-      return {
-        success: false,
-        message: 'Cập nhật thông tin thất bại'
-      };
-    }
   }
 
   // Reset password method (placeholder - would need backend endpoint)

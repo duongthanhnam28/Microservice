@@ -1,4 +1,4 @@
-// UPDATED CustomerShop.js - Remove header authentication (now in Navigation)
+// FIXED CustomerShop.js - Listen to auth state changes
 import React, { useState, useEffect } from 'react';
 import apiService from '../../services/api/apiService';
 import authService from '../../services/api/authService';
@@ -20,7 +20,7 @@ const CustomerShop = ({ onModeChange, onLoginSuccess }) => {
   const [showCheckout, setShowCheckout] = useState(false);
   const [currentImageIndex, setCurrentImageIndex] = useState(0);
   
-  // REMOVED: Auth states (now handled in Navigation)
+  // FIXED: Auth states managed by listener
   const [user, setUser] = useState(null);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
 
@@ -42,17 +42,24 @@ const CustomerShop = ({ onModeChange, onLoginSuccess }) => {
     { value: 'best-selling', label: 'Bán chạy' }
   ];
 
-  // Check authentication on mount (for cart/checkout functionality)
+  // FIXED: Listen to auth state changes
   useEffect(() => {
-    try {
-      if (authService.isUserAuthenticated()) {
-        const currentUser = authService.getCurrentUser();
-        setUser(currentUser);
-        setIsAuthenticated(true);
-      }
-    } catch (error) {
-      console.error('Auth check error:', error);
+    // Initial auth check
+    if (authService.isUserAuthenticated()) {
+      setUser(authService.getCurrentUser());
+      setIsAuthenticated(true);
     }
+
+    // Subscribe to auth state changes
+    const unsubscribe = authService.addAuthStateListener((authState) => {
+      console.log('CustomerShop: Auth state changed:', authState);
+      setIsAuthenticated(authState.isAuthenticated);
+      setUser(authState.user);
+    });
+
+    return () => {
+      unsubscribe();
+    };
   }, []);
 
   // Load products
@@ -328,8 +335,6 @@ const CustomerShop = ({ onModeChange, onLoginSuccess }) => {
     setSelectedProduct(null);
   };
 
-  // REMOVED: Authentication modal functions (handled by Navigation)
-
   // Checkout functions
   const handleStartCheckout = () => {
     try {
@@ -377,8 +382,6 @@ const CustomerShop = ({ onModeChange, onLoginSuccess }) => {
 
   return (
     <div className="customer-shop">
-      {/* REMOVED: Header section (moved to Navigation component) */}
-
       {/* Filters */}
       <div className="shop-filters compact">
         <div className="filters-content">

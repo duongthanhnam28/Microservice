@@ -1,4 +1,4 @@
-// src/components/auth/UserProfileMenu.js - User Profile Dropdown
+// FIXED UserProfileMenu.js - Listen to auth state changes
 import React, { useState, useRef, useEffect } from 'react';
 import authService from '../../../services/api/authService';
 import { notificationManager } from '../../layout/Notification/Notification';
@@ -7,6 +7,7 @@ import './UserProfileMenu.css';
 const UserProfileMenu = ({ user, onLogout, onModeChange }) => {
   const [isOpen, setIsOpen] = useState(false);
   const [showProfileModal, setShowProfileModal] = useState(false);
+  const [currentUser, setCurrentUser] = useState(user); // Track current user state
   const [profileData, setProfileData] = useState({
     ten: user?.ten || '',
     email: user?.email || '',
@@ -18,6 +19,27 @@ const UserProfileMenu = ({ user, onLogout, onModeChange }) => {
   const [loading, setLoading] = useState(false);
   
   const menuRef = useRef(null);
+
+  // FIXED: Listen to auth state changes to update user info
+  useEffect(() => {
+    const unsubscribe = authService.addAuthStateListener((authState) => {
+      if (authState.isAuthenticated && authState.user) {
+        console.log('UserProfileMenu: User updated from auth service:', authState.user);
+        setCurrentUser(authState.user);
+        setProfileData({
+          ten: authState.user.ten || '',
+          email: authState.user.email || '',
+          sdt: authState.user.sdt || '',
+          diaChi: authState.user.diaChi || '',
+          ngaySinh: authState.user.ngaySinh || ''
+        });
+      }
+    });
+
+    return () => {
+      unsubscribe();
+    };
+  }, []);
 
   // Close menu when clicking outside
   useEffect(() => {
@@ -31,9 +53,10 @@ const UserProfileMenu = ({ user, onLogout, onModeChange }) => {
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
-  // Update profile data when user changes
+  // Update profile data when user prop changes
   useEffect(() => {
     if (user) {
+      setCurrentUser(user);
       setProfileData({
         ten: user.ten || '',
         email: user.email || '',
@@ -44,11 +67,20 @@ const UserProfileMenu = ({ user, onLogout, onModeChange }) => {
     }
   }, [user]);
 
-  const handleLogout = () => {
-    const result = authService.logout();
-    if (result.success) {
-      notificationManager.success(result.message);
+  const handleLogout = async () => {
+    console.log('UserProfileMenu: Logout triggered');
+    
+    try {
+      const result = await authService.logout();
+      if (result.success) {
+        setIsOpen(false);
+        notificationManager.success(result.message);
+        if (onLogout) onLogout();
+      }
+    } catch (error) {
+      console.error('Logout error in UserProfileMenu:', error);
       setIsOpen(false);
+      notificationManager.success('Đăng xuất thành công');
       if (onLogout) onLogout();
     }
   };
@@ -88,17 +120,19 @@ const UserProfileMenu = ({ user, onLogout, onModeChange }) => {
 
     setLoading(true);
     try {
+      console.log('UserProfileMenu: Updating profile with data:', profileData);
+      
       const result = await authService.updateProfile(profileData);
       
       if (result.success) {
-        notificationManager.success('Cập nhật thông tin thành công');
+        notificationManager.success(result.message);
         setShowProfileModal(false);
-        // Force refresh user data
-        window.location.reload();
+        // No need to manually update currentUser - authService listener will handle it
       } else {
         notificationManager.error(result.message);
       }
     } catch (error) {
+      console.error('Profile update error:', error);
       notificationManager.error('Cập nhật thông tin thất bại');
     } finally {
       setLoading(false);
@@ -106,23 +140,23 @@ const UserProfileMenu = ({ user, onLogout, onModeChange }) => {
   };
 
   const getRoleDisplay = () => {
-    if (!user?.roles || user.roles.length === 0) return 'Khách hàng';
+    if (!currentUser?.roles || currentUser.roles.length === 0) return 'Khách hàng';
     
-    if (user.isAdmin) return 'Quản trị viên';
+    if (currentUser.isAdmin) return 'Quản trị viên';
     return 'Khách hàng';
   };
 
   const getRoleColor = () => {
-    if (user?.isAdmin) return '#ef4444';
+    if (currentUser?.isAdmin) return '#ef4444';
     return '#10b981';
   };
 
   const getAvatarText = () => {
-    if (!user?.ten) return 'U';
-    return user.ten.split(' ').map(word => word[0]).join('').toUpperCase().slice(0, 2);
+    if (!currentUser?.ten) return 'U';
+    return currentUser.ten.split(' ').map(word => word[0]).join('').toUpperCase().slice(0, 2);
   };
 
-  if (!user) return null;
+  if (!currentUser) return null;
 
   return (
     <>
@@ -132,7 +166,7 @@ const UserProfileMenu = ({ user, onLogout, onModeChange }) => {
             <span>{getAvatarText()}</span>
           </div>
           <div className="user-info">
-            <div className="user-name">{user.ten}</div>
+            <div className="user-name">{currentUser.ten}</div>
             <div className="user-role" style={{ color: getRoleColor() }}>
               {getRoleDisplay()}
             </div>
@@ -149,8 +183,8 @@ const UserProfileMenu = ({ user, onLogout, onModeChange }) => {
                 <span>{getAvatarText()}</span>
               </div>
               <div className="user-details">
-                <div className="user-name">{user.ten}</div>
-                <div className="user-email">{user.email}</div>
+                <div className="user-name">{currentUser.ten}</div>
+                <div className="user-email">{currentUser.email}</div>
                 <div className="user-role-badge" style={{ backgroundColor: getRoleColor() }}>
                   {getRoleDisplay()}
                 </div>
@@ -179,7 +213,7 @@ const UserProfileMenu = ({ user, onLogout, onModeChange }) => {
                 <span>Sản phẩm yêu thích</span>
               </button>
 
-              {user.isAdmin && (
+              {currentUser.isAdmin && (
                 <>
                   <div className="menu-divider"></div>
                   <button 
@@ -236,7 +270,7 @@ const UserProfileMenu = ({ user, onLogout, onModeChange }) => {
                   <span>{getAvatarText()}</span>
                 </div>
                 <div className="profile-role-info">
-                  <div className="profile-name">{user.ten}</div>
+                  <div className="profile-name">{currentUser.ten}</div>
                   <div className="profile-role" style={{ color: getRoleColor() }}>
                     {getRoleDisplay()}
                   </div>

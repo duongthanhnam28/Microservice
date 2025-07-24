@@ -1,5 +1,5 @@
+// FIXED UserController.java - Add update profile endpoint
 package com.stu.account_service.controller;
-
 
 import com.stu.account_service.dto.request.*;
 import com.stu.account_service.dto.response.ApiResponse;
@@ -23,7 +23,7 @@ import java.util.List;
 @Slf4j
 public class UserController {
     private final AuthenticationService authenticationService;
-    private   final UserService userService;
+    private final UserService userService;
 
     @PostMapping("/change-password")
     public ApiResponse<Void> changePassword(@RequestBody @Valid ChangePasswordRequest request) {
@@ -36,13 +36,29 @@ public class UserController {
                 .build();
     }
 
+    // ADDED: Update profile endpoint
+    @PutMapping("/profile")
+    public ApiResponse<UserResponse> updateProfile(@RequestBody @Valid UpdateUserRequest request) {
+        Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
+        String username = authentication.getName();
 
-    // Cấp thêm role cho user
+        log.info("Updating profile for user: {}", username);
+
+        UserResponse updatedUser = userService.updateUserProfile(username, request);
+
+        return ApiResponse.<UserResponse>builder()
+                .result(updatedUser)
+                .message("Cập nhật thông tin thành công")
+                .timestamp(LocalDateTime.now())
+                .build();
+    }
+
+    // Cấp thêm role cho user
     @PostMapping("/admin/addRoleToUser")
     public ApiResponse<UserResponse> addRoleToUser(@RequestBody AddRoleToUserRequest request){
         return ApiResponse.<UserResponse>builder()
                 .result( userService.addRoleToUser(request))
-                .message("Cập nhập role thành công")
+                .message("Cập nhập role thành công")
                 .build();
     }
 
@@ -50,25 +66,25 @@ public class UserController {
     public ApiResponse<UserResponse> removeRoleFromUser(@RequestBody @Valid AddRoleToUserRequest request) {
         return ApiResponse.<UserResponse>builder()
                 .result(userService.removeRoleFromUser(request))
-                .message("Xóa role thành công")
+                .message("Xóa role thành công")
                 .build();
     }
 
-   @GetMapping("/{userId}/roles")
-   public java.util.Set<String> getUserRoles(@PathVariable Long userId) {
-       return userService.getUserRoles(userId);
-   }
+    @GetMapping("/{userId}/roles")
+    public java.util.Set<String> getUserRoles(@PathVariable Long userId) {
+        return userService.getUserRoles(userId);
+    }
 
-   @GetMapping("/{userId}/permissions")
-   public java.util.Set<String> getUserPermissions(@PathVariable Long userId) {
-       return userService.getUserPermissions(userId);
-   }
+    @GetMapping("/{userId}/permissions")
+    public java.util.Set<String> getUserPermissions(@PathVariable Long userId) {
+        return userService.getUserPermissions(userId);
+    }
 
     @GetMapping("/myInfo")
     public ApiResponse<UserResponse> getUserInfo(){
         return ApiResponse.<UserResponse>builder()
                 .result(userService.getMyInfor())
-                .message("Lấy thông tin người dùng thành công")
+                .message("Lấy thông tin người dùng thành công")
                 .build();
 
     }
@@ -89,7 +105,7 @@ public class UserController {
     public ApiResponse<UserResponse> getOneUser(@PathVariable Long userId){
         return ApiResponse.<UserResponse>builder()
                 .result(userService.getOneUser(userId))
-                .message("Lấy thông tin người dùng")
+                .message("Lấy thông tin người dùng")
                 .build();
     }
 

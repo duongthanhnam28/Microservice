@@ -1,9 +1,11 @@
+// FIXED UserService.java - Add updateUserProfile method
 package com.stu.account_service.service;
 
 import com.stu.account_service.dto.request.AddRoleToUserRequest;
 import com.stu.account_service.dto.request.ChangePasswordRequest;
 import com.stu.account_service.dto.request.CreateUserWithRolesRequest;
 import com.stu.account_service.dto.request.RegisterRequest;
+import com.stu.account_service.dto.request.UpdateUserRequest;
 import com.stu.account_service.dto.response.UserResponse;
 import com.stu.account_service.dto.response.RoleResponse;
 import com.stu.account_service.entity.Role;
@@ -79,18 +81,40 @@ public class UserService implements UserDetailsService {
                 .orElseThrow(() -> new AppException(ErrorCode.ROLE_NOT_FOUND));
         user.addRole(defaultRole);
 
-        // Chỉ gán role USER mặc định cho khách hàng đăng ký
-        // Khách hàng không thể tự chọn role khi đăng ký
-        // Role khác sẽ được gán tự động hoặc bởi admin sau này
-
         User savedUser = userRepository.save(user);
 
         log.info("User created successfully with ID: {} and default USER role", savedUser.getId());
         return convertToUserResponse(savedUser);
     }
 
+    // ADDED: Update user profile method
+    public UserResponse updateUserProfile(String username, UpdateUserRequest request) {
+        log.info("Updating profile for user: {} with data: {}", username, request);
 
-    // Thêm method này vào UserService.java
+        User user = userRepository.findByUsername(username)
+                .orElseThrow(() -> new AppException(ErrorCode.USER_NOT_EXISTED));
+
+        // Update user fields
+        if (request.getFirstName() != null && !request.getFirstName().trim().isEmpty()) {
+            user.setFirstName(request.getFirstName().trim());
+        }
+
+        if (request.getLastName() != null && !request.getLastName().trim().isEmpty()) {
+            user.setLastName(request.getLastName().trim());
+        }
+
+        if (request.getPhoneNumber() != null && !request.getPhoneNumber().trim().isEmpty()) {
+            user.setPhoneNumber(request.getPhoneNumber().trim());
+        }
+
+        // Set updated timestamp
+        user.setUpdatedAt(LocalDateTime.now());
+
+        User savedUser = userRepository.save(user);
+        log.info("User profile updated successfully for: {}", username);
+
+        return convertToUserResponse(savedUser);
+    }
 
     /**
      * Kiểm tra user có tồn tại theo ID hay không
@@ -115,12 +139,12 @@ public class UserService implements UserDetailsService {
             return false;
         }
     }
+
     /**
      * Tạo user với role cụ thể - chỉ dành cho ADMIN
      * @param request Thông tin đăng ký user bao gồm roles
      * @return UserResponse
      */
-    //hasAuthority hoặc hasPermission dùng cho permission,
     @PreAuthorize("hasRole('ADMIN')")
     public UserResponse createUserWithRoles(CreateUserWithRolesRequest request) {
         if (userRepository.existsByUsername(request.getUsername())) {
@@ -140,7 +164,7 @@ public class UserService implements UserDetailsService {
                     log.warn("Tạo user thất bại: Role {} không tồn tại", roleName);
                     throw new AppException(ErrorCode.ROLE_NOT_FOUND);
                 }
-                
+
                 // Validation: Không cho phép tạo user với role ADMIN (bảo mật)
                 if ("ADMIN".equals(roleName)) {
                     log.warn("Tạo user thất bại: Không được phép tạo user với role ADMIN");
@@ -179,7 +203,7 @@ public class UserService implements UserDetailsService {
 
         User savedUser = userRepository.save(user);
 
-        log.info("User created successfully with ID: {} and roles: {}", 
+        log.info("User created successfully with ID: {} and roles: {}",
                 savedUser.getId(), request.getRoles());
         return convertToUserResponse(savedUser);
     }
@@ -195,6 +219,7 @@ public class UserService implements UserDetailsService {
                 .enabled(user.getEnabled())
                 .roles(user.getRoles().stream().map(roleService::toResponse).collect(Collectors.toSet()))
                 .createdAt(user.getCreatedAt())
+                .updatedAt(user.getUpdatedAt())
                 .lastLogin(user.getLastLogin())
                 .build();
     }
@@ -215,13 +240,13 @@ public class UserService implements UserDetailsService {
 
         // Cập nhật mật khẩu mới
         user.setPassword(passwordEncoder.encode(request.getNewPassword()));
+        user.setUpdatedAt(LocalDateTime.now());
         userRepository.save(user);
 
         log.info("User {} changed password successfully", username);
     }
 
-    //hàm gán thêm role cho user bỏi admin (dùng khi m̀ admin cần cấp thêm quyền cho user)
-//    @PreAuthorize("hasRole('ADMIN')")
+    //hàm gán thêm role cho user bỏi admin (dùng khi m̀ admin cần cấp thêm quyền cho user)
     public UserResponse addRoleToUser(AddRoleToUserRequest request) {
         User user = userRepository.findById(request.getUserId())
                 .orElseThrow(() -> new AppException(ErrorCode.USER_NOT_EXISTED));
@@ -229,11 +254,12 @@ public class UserService implements UserDetailsService {
                 .orElseThrow(() -> new AppException(ErrorCode.ROLE_NOT_FOUND));
 
         user.getRoles().add(role);
+        user.setUpdatedAt(LocalDateTime.now());
         userRepository.save(user);
         return convertToUserResponse(user);
     }
 
-    // xóa role khỏi một user bởi admin
+    // xóa role khỏi một user bởi admin
     @PreAuthorize("hasRole('ADMIN')")
     public UserResponse removeRoleFromUser(AddRoleToUserRequest request) {
         User user = userRepository.findById(request.getUserId())
@@ -241,26 +267,27 @@ public class UserService implements UserDetailsService {
         Role role = roleRepository.findByName(request.getRoleName())
                 .orElseThrow(() -> new AppException(ErrorCode.ROLE_NOT_FOUND));
         user.getRoles().remove(role);
+        user.setUpdatedAt(LocalDateTime.now());
         userRepository.save(user);
         return convertToUserResponse(user);
     }
 
-   public java.util.Set<String> getUserRoles(Long userId) {
-       User user = userRepository.findById(userId)
-               .orElseThrow(() -> new AppException(ErrorCode.USER_NOT_EXISTED));
-       return user.getRoles().stream().map(Role::getName).collect(java.util.stream.Collectors.toSet());
-   }
+    public java.util.Set<String> getUserRoles(Long userId) {
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> new AppException(ErrorCode.USER_NOT_EXISTED));
+        return user.getRoles().stream().map(Role::getName).collect(java.util.stream.Collectors.toSet());
+    }
 
-   public java.util.Set<String> getUserPermissions(Long userId) {
-       User user = userRepository.findById(userId)
-               .orElseThrow(() -> new AppException(ErrorCode.USER_NOT_EXISTED));
-       return user.getRoles().stream()
-               .flatMap(role -> role.getPermissions().stream())
-               .map(com.stu.account_service.entity.Permission::getName)
-               .collect(java.util.stream.Collectors.toSet());
-   }
+    public java.util.Set<String> getUserPermissions(Long userId) {
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> new AppException(ErrorCode.USER_NOT_EXISTED));
+        return user.getRoles().stream()
+                .flatMap(role -> role.getPermissions().stream())
+                .map(com.stu.account_service.entity.Permission::getName)
+                .collect(java.util.stream.Collectors.toSet());
+    }
 
-    // người dùng tự lấy thông tin đăng nhập
+    // người dùng tự lấy thông tin đăng nhập
     public UserResponse getMyInfor(){
         var context = SecurityContextHolder.getContext();
         String name = context.getAuthentication().getName();
@@ -285,8 +312,7 @@ public class UserService implements UserDetailsService {
         List<User> users = userRepository.findAll();
         List<UserResponse> responses = new ArrayList<>();
         for(User user:users) {
-            UserResponse response = new UserResponse();
-            response =  convertToUserResponse(user);
+            UserResponse response = convertToUserResponse(user);
             responses.add(response);
         }
         return responses;
@@ -298,17 +324,17 @@ public class UserService implements UserDetailsService {
     public void debugUserPermissions(String username) {
         User user = userRepository.findByUsername(username)
                 .orElseThrow(() -> new AppException(ErrorCode.USER_NOT_EXISTED));
-        
+
         log.info("=== Debug User Permissions ===");
         log.info("User: {}", user.getUsername());
         log.info("Roles: {}", user.getRoles().stream().map(Role::getName).collect(Collectors.toSet()));
-        
+
         for (Role role : user.getRoles()) {
-            log.info("Role '{}' has permissions: {}", 
-                role.getName(), 
-                role.getPermissions().stream().map(Permission::getName).collect(Collectors.toSet()));
+            log.info("Role '{}' has permissions: {}",
+                    role.getName(),
+                    role.getPermissions().stream().map(Permission::getName).collect(Collectors.toSet()));
         }
-        
+
         log.info("All authorities: {}", user.getAuthorities());
         log.info("===============================");
     }

@@ -1,4 +1,4 @@
-// 1. FIXED Navigation.js - Thêm đăng nhập và sắp xếp lại header
+// FIXED Navigation.js - Proper auth state management with listeners
 import React, { useState, useEffect } from 'react';
 import authService from '../../../services/api/authService';
 import LoginRegisterModal from '../../auth/LoginRegisterModal/LoginRegisterModal';
@@ -13,25 +13,53 @@ const Navigation = ({ currentMode, onModeChange }) => {
   const [user, setUser] = useState(null);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
 
-  // Check authentication on component mount
+  // FIXED: Listen to auth state changes from authService
   useEffect(() => {
+    // Initial auth check
     if (authService.isUserAuthenticated()) {
       setUser(authService.getCurrentUser());
       setIsAuthenticated(true);
     }
+
+    // Subscribe to auth state changes
+    const unsubscribe = authService.addAuthStateListener((authState) => {
+      console.log('Navigation: Auth state changed:', authState);
+      setIsAuthenticated(authState.isAuthenticated);
+      setUser(authState.user);
+    });
+
+    return () => {
+      unsubscribe();
+    };
   }, []);
 
   const handleLoginSuccess = (userData) => {
+    console.log('Navigation: Login success:', userData);
     setUser(userData);
     setIsAuthenticated(true);
     setShowAuthModal(false);
     notificationManager.success(`Chào mừng ${userData.ten}!`);
   };
 
-  const handleLogout = () => {
-    setUser(null);
-    setIsAuthenticated(false);
-    setIsMenuOpen(false);
+  const handleLogout = async () => {
+    console.log('Navigation: Logout triggered');
+    
+    try {
+      const result = await authService.logout();
+      if (result.success) {
+        setUser(null);
+        setIsAuthenticated(false);
+        setIsMenuOpen(false);
+        notificationManager.success(result.message);
+      }
+    } catch (error) {
+      console.error('Logout error in Navigation:', error);
+      // Still clear local state on error
+      setUser(null);
+      setIsAuthenticated(false);
+      setIsMenuOpen(false);
+      notificationManager.success('Đăng xuất thành công');
+    }
   };
 
   const openAuthModal = (mode = 'login') => {
