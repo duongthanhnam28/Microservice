@@ -1,4 +1,4 @@
-// FIXED App.js - No auto-login, proper navigation
+// FIXED App.js - Properly handle auth state synchronization
 import React, { useEffect, useState } from 'react';
 import AdminLayout from './components/admin/AdminLayout/AdminLayout';
 import CustomerShop from './components/shop/CustomerShop';
@@ -11,10 +11,25 @@ function App() {
   const [currentMode, setCurrentMode] = useState('customer');
   const [isLoading, setIsLoading] = useState(true);
   const [isTransitioning, setIsTransitioning] = useState(false);
+  
+  // FIXED: Add central auth state management
+  const [authState, setAuthState] = useState({
+    isAuthenticated: false,
+    user: null
+  });
 
-  // FIXED: NO auto-login - just initialize app
+  // FIXED: Central auth state listener
   useEffect(() => {
     const initializeApp = () => {
+      // Check initial auth state
+      const isAuth = authService.isUserAuthenticated();
+      const currentUser = authService.getCurrentUser();
+      
+      setAuthState({
+        isAuthenticated: isAuth,
+        user: currentUser
+      });
+      
       // Always start with customer mode
       setCurrentMode('customer');
       updateAppState('customer');
@@ -27,9 +42,31 @@ function App() {
       setIsLoading(false);
     };
 
+    // FIXED: Subscribe to auth changes BEFORE initializing
+    const unsubscribe = authService.addAuthStateListener((newAuthState) => {
+      console.log('App: Auth state changed:', newAuthState);
+      
+      setAuthState({
+        isAuthenticated: newAuthState.isAuthenticated,
+        user: newAuthState.user
+      });
+      
+      // FIXED: If user logged out and in admin mode, redirect to customer
+      if (!newAuthState.isAuthenticated && currentMode === 'admin') {
+        console.log('App: User logged out while in admin mode, switching to customer');
+        setCurrentMode('customer');
+        updateAppState('customer');
+        window.history.replaceState({}, '', '/shop');
+      }
+    });
+
     // Short delay for smooth loading
     setTimeout(initializeApp, 300);
-  }, []);
+
+    return () => {
+      unsubscribe();
+    };
+  }, [currentMode]); // Add currentMode as dependency
 
   // Listen for browser navigation
   useEffect(() => {
@@ -38,6 +75,19 @@ function App() {
       const newMode = urlPath.includes('/admin') ? 'admin' : 'customer';
       
       if (newMode !== currentMode) {
+        // FIXED: Check auth before allowing admin mode
+        if (newMode === 'admin' && !authState.isAuthenticated) {
+          // Redirect to customer if trying to access admin without auth
+          window.history.replaceState({}, '', '/shop');
+          return;
+        }
+        
+        if (newMode === 'admin' && authState.user && !authState.user.isAdmin) {
+          // Redirect to customer if not admin
+          window.history.replaceState({}, '', '/shop');
+          return;
+        }
+        
         setIsTransitioning(true);
         setTimeout(() => {
           setCurrentMode(newMode);
@@ -49,7 +99,7 @@ function App() {
 
     window.addEventListener('popstate', handlePopState);
     return () => window.removeEventListener('popstate', handlePopState);
-  }, [currentMode]);
+  }, [currentMode, authState]);
 
   const updateAppState = (mode) => {
     document.title = mode === 'admin' 
@@ -68,19 +118,18 @@ function App() {
     localStorage.setItem('appMode', mode);
   };
 
-  // FIXED: Check auth and admin permissions
+  // FIXED: Improved mode change with auth checks
   const handleModeChange = (newMode) => {
     if (newMode === currentMode) return;
     
     // Check if user is authenticated and admin for admin mode
     if (newMode === 'admin') {
-      if (!authService.isUserAuthenticated()) {
+      if (!authState.isAuthenticated) {
         alert('Vui lòng đăng nhập để truy cập trang quản trị');
         return;
       }
       
-      const user = authService.getCurrentUser();
-      if (!user || !user.isAdmin) {
+      if (!authState.user || !authState.user.isAdmin) {
         alert('Bạn không có quyền truy cập trang quản trị');
         return;
       }
@@ -99,15 +148,45 @@ function App() {
     }, 200);
   };
 
-  // FIXED: Handle login success with auto-redirect for admin
+  // FIXED: Handle login success with proper state update
   const handleLoginSuccess = (userData) => {
-    console.log('Login successful, user data:', userData);
+    console.log('App: Login successful, user data:', userData);
+    
+    // Auth state will be updated by the listener, so no need to manually set here
     
     // If user is admin, automatically redirect to admin panel
     if (userData.isAdmin) {
       setTimeout(() => {
         handleModeChange('admin');
       }, 1000);
+    }
+  };
+
+  // FIXED: Handle logout properly with state sync
+  const handleLogout = async () => {
+    console.log('App: Logout initiated');
+    
+    try {
+      // AuthService will handle the logout and notify listeners
+      const result = await authService.logout();
+      
+      // Force switch to customer mode after logout
+      if (currentMode === 'admin') {
+        setCurrentMode('customer');
+        updateAppState('customer');
+        window.history.replaceState({}, '', '/shop');
+      }
+      
+      console.log('App: Logout completed, switched to customer mode');
+      
+    } catch (error) {
+      console.error('App: Logout error:', error);
+      // Still force mode switch on error
+      if (currentMode === 'admin') {
+        setCurrentMode('customer');
+        updateAppState('customer');
+        window.history.replaceState({}, '', '/shop');
+      }
     }
   };
 
@@ -130,11 +209,13 @@ function App() {
 
   return (
     <div className="App">
-      {/* FIXED: Add Navigation component for customer mode only */}
+      {/* FIXED: Pass auth state to Navigation */}
       {currentMode === 'customer' && (
         <Navigation 
           currentMode={currentMode}
           onModeChange={handleModeChange}
+          authState={authState}
+          onLogout={handleLogout}
         />
       )}
       
@@ -145,12 +226,15 @@ function App() {
             <AdminLayout 
               key="admin" 
               onModeChange={handleModeChange}
+              authState={authState}
+              onLogout={handleLogout}
             />
           ) : (
             <CustomerShop 
               key="customer" 
               onModeChange={handleModeChange}
               onLoginSuccess={handleLoginSuccess}
+              authState={authState}
             />
           )}
         </div>
@@ -180,12 +264,14 @@ function App() {
                 <a href="#privacy">Chính sách bảo mật</a>
                 <a href="#terms">Điều khoản sử dụng</a>
                 <a href="#help">Trợ giúp</a>
-                <button 
-                  className="footer-mode-btn"
-                  onClick={() => handleModeChange('admin')}
-                >
-                  🛠️ Quản trị viên
-                </button>
+                {authState.isAuthenticated && authState.user?.isAdmin && (
+                  <button 
+                    className="footer-mode-btn"
+                    onClick={() => handleModeChange('admin')}
+                  >
+                    🛠️ Quản trị viên
+                  </button>
+                )}
               </div>
             </div>
           </div>

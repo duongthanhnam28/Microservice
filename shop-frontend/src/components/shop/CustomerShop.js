@@ -1,4 +1,4 @@
-// FIXED CustomerShop.js - Listen to auth state changes
+// FIXED CustomerShop.js - Use passed auth state
 import React, { useState, useEffect } from 'react';
 import apiService from '../../services/api/apiService';
 import authService from '../../services/api/authService';
@@ -6,7 +6,7 @@ import { notificationManager } from '../layout/Notification/Notification';
 import EnhancedCheckout from '../order/EnhacedCheckout/EnhancedCheckout';
 import './CustomerShop.css';
 
-const CustomerShop = ({ onModeChange, onLoginSuccess }) => {
+const CustomerShop = ({ onModeChange, onLoginSuccess, authState }) => {
   const [products, setProducts] = useState([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
@@ -20,9 +20,9 @@ const CustomerShop = ({ onModeChange, onLoginSuccess }) => {
   const [showCheckout, setShowCheckout] = useState(false);
   const [currentImageIndex, setCurrentImageIndex] = useState(0);
   
-  // FIXED: Auth states managed by listener
-  const [user, setUser] = useState(null);
-  const [isAuthenticated, setIsAuthenticated] = useState(false);
+  // FIXED: Use auth state from App instead of local state
+  const isAuthenticated = authState?.isAuthenticated || false;
+  const user = authState?.user || null;
 
   const categories = [
     { id: '', name: 'Tất cả' },
@@ -41,26 +41,6 @@ const CustomerShop = ({ onModeChange, onLoginSuccess }) => {
     { value: 'price-high', label: 'Giá cao' },
     { value: 'best-selling', label: 'Bán chạy' }
   ];
-
-  // FIXED: Listen to auth state changes
-  useEffect(() => {
-    // Initial auth check
-    if (authService.isUserAuthenticated()) {
-      setUser(authService.getCurrentUser());
-      setIsAuthenticated(true);
-    }
-
-    // Subscribe to auth state changes
-    const unsubscribe = authService.addAuthStateListener((authState) => {
-      console.log('CustomerShop: Auth state changed:', authState);
-      setIsAuthenticated(authState.isAuthenticated);
-      setUser(authState.user);
-    });
-
-    return () => {
-      unsubscribe();
-    };
-  }, []);
 
   // Load products
   useEffect(() => {
@@ -335,7 +315,7 @@ const CustomerShop = ({ onModeChange, onLoginSuccess }) => {
     setSelectedProduct(null);
   };
 
-  // Checkout functions
+  // FIXED: Checkout functions with auth state
   const handleStartCheckout = () => {
     try {
       if (cart.length === 0) {

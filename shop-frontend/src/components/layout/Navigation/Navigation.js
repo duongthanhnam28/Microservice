@@ -1,4 +1,4 @@
-// FIXED Navigation.js - Proper auth state management with listeners
+// FIXED Navigation.js - Use passed auth state instead of local state
 import React, { useState, useEffect } from 'react';
 import authService from '../../../services/api/authService';
 import LoginRegisterModal from '../../auth/LoginRegisterModal/LoginRegisterModal';
@@ -6,59 +6,27 @@ import UserProfileMenu from '../../auth/UserProfileMenu/UserProfileMenu';
 import { notificationManager } from '../Notification/Notification';
 import './Navigation.css';
 
-const Navigation = ({ currentMode, onModeChange }) => {
+const Navigation = ({ currentMode, onModeChange, authState, onLogout }) => {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [showAuthModal, setShowAuthModal] = useState(false);
   const [authModalMode, setAuthModalMode] = useState('login');
-  const [user, setUser] = useState(null);
-  const [isAuthenticated, setIsAuthenticated] = useState(false);
 
-  // FIXED: Listen to auth state changes from authService
-  useEffect(() => {
-    // Initial auth check
-    if (authService.isUserAuthenticated()) {
-      setUser(authService.getCurrentUser());
-      setIsAuthenticated(true);
-    }
-
-    // Subscribe to auth state changes
-    const unsubscribe = authService.addAuthStateListener((authState) => {
-      console.log('Navigation: Auth state changed:', authState);
-      setIsAuthenticated(authState.isAuthenticated);
-      setUser(authState.user);
-    });
-
-    return () => {
-      unsubscribe();
-    };
-  }, []);
+  // FIXED: Use auth state from App instead of local state
+  const isAuthenticated = authState?.isAuthenticated || false;
+  const user = authState?.user || null;
 
   const handleLoginSuccess = (userData) => {
     console.log('Navigation: Login success:', userData);
-    setUser(userData);
-    setIsAuthenticated(true);
     setShowAuthModal(false);
     notificationManager.success(`Chào mừng ${userData.ten}!`);
   };
 
+  // FIXED: Use passed onLogout instead of local logout
   const handleLogout = async () => {
     console.log('Navigation: Logout triggered');
-    
-    try {
-      const result = await authService.logout();
-      if (result.success) {
-        setUser(null);
-        setIsAuthenticated(false);
-        setIsMenuOpen(false);
-        notificationManager.success(result.message);
-      }
-    } catch (error) {
-      console.error('Logout error in Navigation:', error);
-      // Still clear local state on error
-      setUser(null);
-      setIsAuthenticated(false);
-      setIsMenuOpen(false);
-      notificationManager.success('Đăng xuất thành công');
+    setIsMenuOpen(false);
+    if (onLogout) {
+      await onLogout();
     }
   };
 
@@ -139,7 +107,6 @@ const Navigation = ({ currentMode, onModeChange }) => {
             onClick={() => setIsMenuOpen(!isMenuOpen)}
           >
             <div className={`hamburger ${isMenuOpen ? 'active' : ''}`}>
-              <span></span>
               <span></span>
               <span></span>
             </div>
