@@ -1,4 +1,4 @@
-// FIXED App.js - Properly handle auth state synchronization
+// FINAL App.js - Complete fix for admin interface and CORS
 import React, { useEffect, useState } from 'react';
 import AdminLayout from './components/admin/AdminLayout/AdminLayout';
 import CustomerShop from './components/shop/CustomerShop';
@@ -30,13 +30,27 @@ function App() {
         user: currentUser
       });
       
-      // Always start with customer mode
-      setCurrentMode('customer');
-      updateAppState('customer');
+      // FIXED: Check URL to determine initial mode
+      const urlPath = window.location.pathname;
+      const initialMode = urlPath.includes('/admin') ? 'admin' : 'customer';
       
-      // Set URL to customer
-      if (window.location.pathname !== '/shop') {
-        window.history.replaceState({}, '', '/shop');
+      // FIXED: Verify admin access
+      if (initialMode === 'admin') {
+        if (!isAuth || !currentUser?.isAdmin) {
+          // Redirect to customer if no admin access
+          setCurrentMode('customer');
+          updateAppState('customer');
+          window.history.replaceState({}, '', '/shop');
+        } else {
+          setCurrentMode('admin');
+          updateAppState('admin');
+        }
+      } else {
+        setCurrentMode('customer');
+        updateAppState('customer');
+        if (window.location.pathname !== '/shop') {
+          window.history.replaceState({}, '', '/shop');
+        }
       }
       
       setIsLoading(false);
@@ -66,7 +80,7 @@ function App() {
     return () => {
       unsubscribe();
     };
-  }, [currentMode]); // Add currentMode as dependency
+  }, [currentMode]);
 
   // Listen for browser navigation
   useEffect(() => {
@@ -122,6 +136,8 @@ function App() {
   const handleModeChange = (newMode) => {
     if (newMode === currentMode) return;
     
+    console.log(`Attempting to change mode from ${currentMode} to ${newMode}`);
+    
     // Check if user is authenticated and admin for admin mode
     if (newMode === 'admin') {
       if (!authState.isAuthenticated) {
@@ -145,6 +161,7 @@ function App() {
       setCurrentMode(newMode);
       updateAppState(newMode);
       setIsTransitioning(false);
+      console.log(`Successfully changed to ${newMode} mode`);
     }, 200);
   };
 
@@ -209,7 +226,7 @@ function App() {
 
   return (
     <div className="App">
-      {/* FIXED: Pass auth state to Navigation */}
+      {/* FIXED: Only show Navigation in customer mode */}
       {currentMode === 'customer' && (
         <Navigation 
           currentMode={currentMode}

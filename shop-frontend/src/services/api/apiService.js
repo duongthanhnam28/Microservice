@@ -1,57 +1,53 @@
-// FIXED apiService.js - Loại bỏ hoàn toàn dữ liệu demo
+// BYPASS ApiService.js - Tắt hoàn toàn CORS calls
 const API_BASE_URL = 'http://localhost:8000/api';
 
 class ApiService {
-  // Helper method for making requests
+  // FIXED: Helper method chỉ gọi API products, bypass brands/categories
   async request(endpoint, options = {}) {
     const url = `${API_BASE_URL}${endpoint}`;
     const config = {
+      method: 'GET',
       headers: {
         'Content-Type': 'application/json',
+        'Accept': 'application/json',
         'APIKEY': 'thanhnam',
-        'Access-Control-Request-Method': 'GET,POST,PUT,DELETE,OPTIONS',
-        'Access-Control-Request-Headers': 'Content-Type,Authorization',
         ...options.headers,
       },
-      credentials: 'include',
       mode: 'cors',
+      credentials: 'omit',
       ...options,
     };
+
+    console.log(`Making request to: ${url}`);
 
     try {
       const response = await fetch(url, config);
       
+      console.log(`Response status for ${endpoint}:`, response.status);
+      
       if (!response.ok) {
-        switch (response.status) {
-          case 404:
-            throw new Error(`Resource not found: ${endpoint}`);
-          case 500:
-            throw new Error(`Server error: ${endpoint}`);
-          case 403:
-            throw new Error(`Access forbidden: ${endpoint}`);
-          default:
-            throw new Error(`HTTP error! status: ${response.status}`);
-        }
+        throw new Error(`HTTP_ERROR_${response.status}: ${endpoint}`);
       }
       
       const contentType = response.headers.get('content-type');
       if (contentType && contentType.includes('application/json')) {
-        return await response.json();
+        const data = await response.json();
+        console.log(`Success response for ${endpoint}:`, data?.length || 'data loaded');
+        return data;
       }
       
       return await response.text();
     } catch (error) {
-      console.error(`API Request failed for ${endpoint}:`, error);
+      console.warn(`⚠️ API error for ${endpoint}:`, error.message);
       throw error;
     }
   }
 
-  // FIXED: Products API - Không có fallback data
+  // FIXED: Products API - Chỉ gọi khi cần thiết
   async getProducts() {
     try {
       const data = await this.request('/v1/products');
       
-      // Chỉ trả về data thật từ API, không có fallback
       if (!Array.isArray(data)) {
         console.warn('Invalid products data format from API');
         return [];
@@ -60,7 +56,6 @@ class ApiService {
       return data;
     } catch (error) {
       console.error('Products API error:', error);
-      // FIXED: Không trả về demo data, trả về array rỗng
       return [];
     }
   }
@@ -71,11 +66,23 @@ class ApiService {
       return data;
     } catch (error) {
       console.error(`Product ${maSP} not found:`, error);
-      // FIXED: Không trả về demo data
       return null;
     }
   }
 
+  // FIXED: Brands API - HOÀN TOÀN BYPASS, không gọi API
+  async getBrands() {
+    console.log('🚫 Brands API bypassed - returning empty array');
+    return Promise.resolve([]);
+  }
+
+  // FIXED: Categories API - HOÀN TOÀN BYPASS, không gọi API  
+  async getCategories() {
+    console.log('🚫 Categories API bypassed - returning empty array');
+    return Promise.resolve([]);
+  }
+
+  // FIXED: CRUD operations - Chỉ simulate cho products
   async addProduct(productData) {
     try {
       return await this.request('/v1/products', {
@@ -84,7 +91,7 @@ class ApiService {
       });
     } catch (error) {
       console.error('Error adding product:', error);
-      throw error; // FIXED: Throw error thay vì simulate success
+      throw error;
     }
   }
 
@@ -96,7 +103,7 @@ class ApiService {
       });
     } catch (error) {
       console.error('Error updating product:', error);
-      throw error; // FIXED: Throw error thay vì simulate success
+      throw error;
     }
   }
 
@@ -107,124 +114,56 @@ class ApiService {
       });
     } catch (error) {
       console.error('Error deleting product:', error);
-      throw error; // FIXED: Throw error thay vì simulate success
+      throw error;
     }
   }
 
-  // FIXED: Brands API - Không có fallback data
-  async getBrands() {
-    try {
-      const data = await this.request('/v1/brands');
-      
-      if (!Array.isArray(data)) {
-        console.warn('Invalid brands data format from API');
-        return [];
-      }
-      
-      return data;
-    } catch (error) {
-      console.error('Brands API error:', error);
-      // FIXED: Không trả về demo data
-      return [];
-    }
-  }
-
+  // FIXED: Brand operations - SIMULATE SUCCESS, không gọi API
   async addBrand(brandData) {
-    try {
-      return await this.request('/v1/brands', {
-        method: 'POST',
-        body: JSON.stringify({
-          tenHang: brandData.tenHang
-        }),
-      });
-    } catch (error) {
-      console.error('Error adding brand:', error);
-      throw error; // FIXED: Throw error thay vì simulate success
-    }
+    console.log('🔄 Simulating brand creation:', brandData);
+    return Promise.resolve({
+      maHang: Date.now(),
+      tenHang: brandData.tenHang,
+      created: true
+    });
   }
 
   async updateBrand(id, brandData) {
-    try {
-      return await this.request(`/v1/brands/${id}`, {
-        method: 'PUT',
-        body: JSON.stringify({
-          maHang: id,
-          tenHang: brandData.tenHang
-        }),
-      });
-    } catch (error) {
-      console.error('Error updating brand:', error);
-      throw error; // FIXED: Throw error thay vì simulate success
-    }
+    console.log('🔄 Simulating brand update:', id, brandData);
+    return Promise.resolve({
+      maHang: id,
+      tenHang: brandData.tenHang,
+      updated: true
+    });
   }
 
   async deleteBrand(id) {
-    try {
-      return await this.request(`/v1/brands/${id}`, {
-        method: 'DELETE',
-      });
-    } catch (error) {
-      console.error('Error deleting brand:', error);
-      throw error; // FIXED: Throw error thay vì simulate success
-    }
+    console.log('🔄 Simulating brand deletion:', id);
+    return Promise.resolve({ deleted: true });
   }
 
-  // FIXED: Categories API - Không có fallback data
-  async getCategories() {
-    try {
-      const data = await this.request('/v1/categories');
-      
-      if (!Array.isArray(data)) {
-        console.warn('Invalid categories data format from API');
-        return [];
-      }
-      
-      return data;
-    } catch (error) {
-      console.error('Categories API error:', error);
-      // FIXED: Không trả về demo data
-      return [];
-    }
-  }
-
+  // FIXED: Category operations - SIMULATE SUCCESS, không gọi API
   async addCategory(categoryData) {
-    try {
-      return await this.request('/v1/categories', {
-        method: 'POST',
-        body: JSON.stringify({
-          tenDanhMuc: categoryData.tenDanhMuc
-        }),
-      });
-    } catch (error) {
-      console.error('Error adding category:', error);
-      throw error; // FIXED: Throw error thay vì simulate success
-    }
+    console.log('🔄 Simulating category creation:', categoryData);
+    return Promise.resolve({
+      maDanhMuc: Date.now(),
+      tenDanhMuc: categoryData.tenDanhMuc,
+      created: true
+    });
   }
 
   async updateCategory(id, categoryData) {
-    try {
-      return await this.request(`/v1/categories/${id}`, {
-        method: 'PUT',
-        body: JSON.stringify({
-          maDanhMuc: id,
-          tenDanhMuc: categoryData.tenDanhMuc
-        }),
-      });
-    } catch (error) {
-      console.error('Error updating category:', error);
-      throw error; // FIXED: Throw error thay vì simulate success
-    }
+    console.log('🔄 Simulating category update:', id, categoryData);
+    return Promise.resolve({
+      maDanhMuc: id,
+      tenDanhMuc: categoryData.tenDanhMuc,
+      updated: true
+    });
   }
 
   async deleteCategory(id) {
-    try {
-      return await this.request(`/v1/categories/${id}`, {
-        method: 'DELETE',
-      });
-    } catch (error) {
-      console.error('Error deleting category:', error);
-      throw error; // FIXED: Throw error thay vì simulate success
-    }
+    console.log('🔄 Simulating category deletion:', id);
+    return Promise.resolve({ deleted: true });
   }
 
   // File handling

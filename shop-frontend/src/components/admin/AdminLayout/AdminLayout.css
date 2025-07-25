@@ -749,3 +749,34 @@
     padding: 1rem;
   }
 }
+/* API Status and No Data Styles */
+.api-unavailable {
+  text-align: center;
+  padding: 4rem 2rem;
+  background: #fef2f2;
+  border-radius: 12px;
+  border: 1px solid #fecaca;
+  color: #dc2626;
+}
+
+.api-unavailable h2 {
+  font-size: 1.5rem;
+  margin-bottom: 1rem;
+  color: #dc2626;
+}
+
+.api-unavailable p {
+  font-size: 1rem;
+  line-height: 1.6;
+  margin-bottom: 0.5rem;
+  color: #7f1d1d;
+}
+
+.no-data {
+  text-align: center;
+  padding: 3rem 2rem;
+  color: #6b7280;
+  background: #f9fafb;
+  border-radius: 12px;
+  border: 1px solid #e5e7eb;
+}
