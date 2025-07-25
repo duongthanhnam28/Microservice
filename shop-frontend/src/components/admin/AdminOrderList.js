@@ -1,4 +1,4 @@
-// FIXED AdminOrderList.js - Chỉ sử dụng dữ liệu thực từ API
+// FIXED AdminOrderList.js - Chỉ hiển thị trạng thái, không cho chọn
 import React, { useEffect, useState } from "react";
 import orderApiService from "../../services/api/orderApiService";
 import userService from "../../services/userService";
@@ -19,27 +19,32 @@ const AdminOrderList = ({ onSelectOrder }) => {
       setLoading(true);
       setError(null);
       
-      // Thử gọi API lấy tất cả đơn hàng
       const ordersData = await orderApiService.getAllOrders();
       
-      if (Array.isArray(ordersData)) {
-        setOrders(ordersData);
-        await loadCustomerInfo(ordersData);
-        console.log('Successfully loaded orders from API:', ordersData.length);
-      } else {
-        throw new Error('Invalid orders data format');
+      if (!Array.isArray(ordersData)) {
+        throw new Error('Định dạng dữ liệu đơn hàng không hợp lệ');
       }
+
+      if (ordersData.length === 0) {
+        console.log('No orders found in database');
+        setOrders([]);
+        return;
+      }
+      
+      setOrders(ordersData);
+      await loadCustomerInfo(ordersData);
+      console.log('Successfully loaded orders from API:', ordersData.length);
       
     } catch (error) {
       console.error('Error fetching orders:', error);
       setError('Không thể tải danh sách đơn hàng: ' + error.message);
       setOrders([]);
+      notificationManager.error('Không thể tải danh sách đơn hàng từ server');
     } finally {
       setLoading(false);
     }
   };
 
-  // Load customer information
   const loadCustomerInfo = async (ordersData) => {
     const customerMap = {};
     
@@ -47,13 +52,21 @@ const AdminOrderList = ({ onSelectOrder }) => {
       const userIds = [...new Set(ordersData.map(order => order.userId))];
       
       for (const userId of userIds) {
+        if (!userId) continue;
+        
         try {
           const userResponse = await userService.getUserById(userId);
-          if (userResponse.success) {
+          if (userResponse.success && userResponse.data) {
             customerMap[userId] = userResponse.data;
+            console.log(`Loaded customer info for user ${userId}`);
           }
         } catch (error) {
           console.warn(`Could not load customer ${userId}:`, error);
+          customerMap[userId] = {
+            ten: `User ${userId}`,
+            email: `user${userId}@demo.com`,
+            sdt: 'N/A'
+          };
         }
       }
       
@@ -86,17 +99,25 @@ const AdminOrderList = ({ onSelectOrder }) => {
 
   const getStatusText = (status) => {
     const statusMap = {
+      0: 'Đã hủy',
+      1: 'Chờ xác nhận',
+      2: 'Đã xác nhận', 
+      3: 'Đã giao hàng',
       'PENDING': 'Chờ xác nhận',
       'CONFIRMED': 'Đã xác nhận',
       'SHIPPED': 'Đang giao hàng',
       'DELIVERED': 'Đã giao hàng',
       'CANCELLED': 'Đã hủy'
     };
-    return statusMap[status] || status;
+    return statusMap[status] || status || 'Không xác định';
   };
 
   const getStatusColor = (status) => {
     const colorMap = {
+      0: '#ef4444',
+      1: '#f59e0b',
+      2: '#3b82f6',
+      3: '#10b981',
       'PENDING': '#f59e0b',
       'CONFIRMED': '#3b82f6',
       'SHIPPED': '#8b5cf6',
@@ -104,23 +125,6 @@ const AdminOrderList = ({ onSelectOrder }) => {
       'CANCELLED': '#ef4444'
     };
     return colorMap[status] || '#6b7280';
-  };
-
-  const handleUpdateStatus = async (orderId, newStatus) => {
-    try {
-      await orderApiService.updateOrderStatus(orderId, newStatus);
-      
-      setOrders(prev => prev.map(order => 
-        order.orderId === orderId 
-          ? { ...order, status: newStatus }
-          : order
-      ));
-      
-      notificationManager.success('Cập nhật trạng thái thành công');
-    } catch (error) {
-      console.error('Error updating order status:', error);
-      notificationManager.error('Không thể cập nhật trạng thái đơn hàng: ' + error.message);
-    }
   };
 
   const handleDeleteOrder = async (orderId) => {
@@ -176,7 +180,8 @@ const AdminOrderList = ({ onSelectOrder }) => {
 
       {orders.length === 0 ? (
         <div className="no-data">
-          <p>Chưa có đơn hàng nào</p>
+          <h3>📋 Chưa có đơn hàng nào</h3>
+          <p>Hệ thống chưa có đơn hàng nào được tạo.</p>
         </div>
       ) : (
         <div className="data-table">
@@ -198,7 +203,7 @@ const AdminOrderList = ({ onSelectOrder }) => {
                 return (
                   <tr key={order.orderId}>
                     <td>
-                      <strong>{order.orderId}</strong>
+                      <strong>#{order.orderId}</strong>
                     </td>
                     <td>{customer.ten || `User ${order.userId}`}</td>
                     <td>{customer.email || 'N/A'}</td>
@@ -208,24 +213,20 @@ const AdminOrderList = ({ onSelectOrder }) => {
                       </strong>
                     </td>
                     <td>
-                      <select
-                        value={order.status}
-                        onChange={(e) => handleUpdateStatus(order.orderId, e.target.value)}
+                      {/* FIXED: CHỈ hiển thị trạng thái, KHÔNG cho chọn */}
+                      <span
                         style={{
                           background: getStatusColor(order.status),
                           color: 'white',
-                          border: 'none',
-                          padding: '0.25rem 0.5rem',
-                          borderRadius: '4px',
-                          fontSize: '0.875rem'
+                          padding: '0.25rem 0.75rem',
+                          borderRadius: '12px',
+                          fontSize: '0.875rem',
+                          fontWeight: '600',
+                          display: 'inline-block'
                         }}
                       >
-                        <option value="PENDING">Chờ xác nhận</option>
-                        <option value="CONFIRMED">Đã xác nhận</option>
-                        <option value="SHIPPED">Đang giao hàng</option>
-                        <option value="DELIVERED">Đã giao hàng</option>
-                        <option value="CANCELLED">Đã hủy</option>
-                      </select>
+                        {getStatusText(order.status)}
+                      </span>
                     </td>
                     <td>{formatDate(order.createdDate)}</td>
                     <td>

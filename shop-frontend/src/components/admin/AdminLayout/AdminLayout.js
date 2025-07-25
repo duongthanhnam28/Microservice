@@ -1,6 +1,7 @@
-// FIXED AdminLayout.js - Kết nối thực tế với APIs, không dùng demo data
+// FIXED AdminLayout.js - Thêm thống kê doanh thu thực từ database
 import React, { useState, useEffect } from 'react';
 import apiService from '../../../services/api/apiService';
+import orderApiService from '../../../services/api/orderApiService';
 import { notificationManager } from '../../layout/Notification/Notification';
 import './AdminLayout.css';
 import AdminOrderList from '../AdminOrderList';
@@ -33,18 +34,20 @@ const AdminLayout = ({ onModeChange }) => {
   const [showCategoryModal, setShowCategoryModal] = useState(false);
   const [editingCategory, setEditingCategory] = useState(null);
 
-  // Dashboard stats
+  // FIXED: Dashboard stats với doanh thu thực
   const [stats, setStats] = useState({
     totalProducts: 0,
     totalBrands: 0,
     totalCategories: 0,
-    totalRevenue: 0
+    totalRevenue: 0,
+    totalOrders: 0,
+    deliveredOrders: 0
   });
 
   // Orders states
   const [selectedOrderId, setSelectedOrderId] = useState(null);
 
-  // Load data khi thay đổi menu
+  // FIXED: Load data và tính toán thống kê thực tế
   useEffect(() => {
     const loadData = async () => {
       setLoading(true);
@@ -69,18 +72,7 @@ const AdminLayout = ({ onModeChange }) => {
             break;
             
           case 'dashboard':
-            const [productsRes, brandsRes, categoriesRes] = await Promise.allSettled([
-              apiService.getProducts(),
-              apiService.getBrands(),
-              apiService.getCategories()
-            ]);
-
-            setStats({
-              totalProducts: productsRes.status === 'fulfilled' ? productsRes.value.length : 0,
-              totalBrands: brandsRes.status === 'fulfilled' ? brandsRes.value.length : 0,
-              totalCategories: categoriesRes.status === 'fulfilled' ? categoriesRes.value.length : 0,
-              totalRevenue: 0 // Cần tính từ dữ liệu thực
-            });
+            await loadDashboardStats();
             break;
         }
       } catch (error) {
@@ -93,6 +85,70 @@ const AdminLayout = ({ onModeChange }) => {
 
     loadData();
   }, [activeMenu]);
+
+  // FIXED: Load thống kê dashboard từ dữ liệu thực
+  const loadDashboardStats = async () => {
+    try {
+      const [productsRes, brandsRes, categoriesRes, ordersRes] = await Promise.allSettled([
+        apiService.getProducts(),
+        apiService.getBrands(),
+        apiService.getCategories(),
+        orderApiService.getAllOrders()
+      ]);
+
+      // Tính toán thống kê từ dữ liệu thực
+      const totalProducts = productsRes.status === 'fulfilled' ? productsRes.value.length : 0;
+      const totalBrands = brandsRes.status === 'fulfilled' ? brandsRes.value.length : 0;
+      const totalCategories = categoriesRes.status === 'fulfilled' ? categoriesRes.value.length : 0;
+      
+      let totalRevenue = 0;
+      let totalOrders = 0;
+      let deliveredOrders = 0;
+
+      if (ordersRes.status === 'fulfilled' && Array.isArray(ordersRes.value)) {
+        const orders = ordersRes.value;
+        totalOrders = orders.length;
+        
+        // FIXED: Tính doanh thu từ các đơn hàng đã giao (status = 3)
+        orders.forEach(order => {
+          if (order.status === 3) { // Đã giao hàng
+            deliveredOrders++;
+            totalRevenue += (order.total || 0);
+          }
+        });
+      }
+
+      setStats({
+        totalProducts,
+        totalBrands,
+        totalCategories,
+        totalRevenue,
+        totalOrders,
+        deliveredOrders
+      });
+
+      console.log('Dashboard stats loaded:', {
+        totalProducts,
+        totalBrands,
+        totalCategories,
+        totalRevenue,
+        totalOrders,
+        deliveredOrders
+      });
+
+    } catch (error) {
+      console.error('Error loading dashboard stats:', error);
+      // Set default stats on error
+      setStats({
+        totalProducts: 0,
+        totalBrands: 0,
+        totalCategories: 0,
+        totalRevenue: 0,
+        totalOrders: 0,
+        deliveredOrders: 0
+      });
+    }
+  };
 
   // Load brands và categories cho product form
   useEffect(() => {
@@ -302,7 +358,7 @@ const AdminLayout = ({ onModeChange }) => {
     c.tenDanhMuc && c.tenDanhMuc.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
-  // Dashboard
+  // FIXED: Dashboard với thống kê doanh thu thực
   const renderDashboard = () => (
     <div className="dashboard">
       <div className="dashboard-header">
@@ -336,10 +392,26 @@ const AdminLayout = ({ onModeChange }) => {
         </div>
 
         <div className="stat-card">
+          <div className="stat-icon">🧾</div>
+          <div className="stat-content">
+            <div className="stat-number">{stats.totalOrders}</div>
+            <div className="stat-label">Tổng đơn hàng</div>
+          </div>
+        </div>
+
+        <div className="stat-card">
+          <div className="stat-icon">✅</div>
+          <div className="stat-content">
+            <div className="stat-number">{stats.deliveredOrders}</div>
+            <div className="stat-label">Đã giao hàng</div>
+          </div>
+        </div>
+
+        <div className="stat-card">
           <div className="stat-icon">💰</div>
           <div className="stat-content">
             <div className="stat-number">{formatPrice(stats.totalRevenue)}</div>
-            <div className="stat-label">Doanh thu</div>
+            <div className="stat-label">Tổng doanh thu</div>
           </div>
         </div>
       </div>
@@ -353,6 +425,9 @@ const AdminLayout = ({ onModeChange }) => {
         </button>
         <button className="action-btn" onClick={() => setActiveMenu('categories')}>
           📂 Thêm danh mục
+        </button>
+        <button className="action-btn" onClick={() => loadDashboardStats()}>
+          🔄 Làm mới thống kê
         </button>
       </div>
     </div>

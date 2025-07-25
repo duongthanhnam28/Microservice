@@ -1,4 +1,4 @@
-// FIXED OrderService.java - Cải thiện xử lý user validation và error handling
+// FINAL OrderService.java - Cập nhật trạng thái và doanh thu
 package com.thanhnam.orderservice.command.service;
 
 import com.thanhnam.orderservice.command.data.Order;
@@ -8,8 +8,6 @@ import com.thanhnam.orderservice.command.data.OrderDetailRepository;
 import com.thanhnam.orderservice.command.model.CreateOrderRequest;
 import com.thanhnam.orderservice.client.clients.AccountServiceClient;
 import com.thanhnam.orderservice.client.clients.ProductServiceClient;
-import com.thanhnam.orderservice.client.dto.ProductResponseModel;
-import com.thanhnam.orderservice.client.dto.UserResponse;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -35,18 +33,15 @@ public class OrderService {
         try {
             log.info("Creating order for user: {}", request.getUserId());
 
-            // Validate request
             if (request.getUserId() == null) {
                 throw new IllegalArgumentException("User ID is required");
             }
 
-            // FIXED: Enhanced user validation with better error handling
             if (!userExists(request.getUserId().longValue())) {
-                // FIXED: For demo purposes, allow certain user IDs to pass through
                 if (isValidDemoUser(request.getUserId())) {
                     log.warn("Using demo user ID: {} for order processing", request.getUserId());
                 } else {
-                    throw new IllegalArgumentException("User ID " + request.getUserId() + " does not exist in account-service");
+                    throw new IllegalArgumentException("User ID " + request.getUserId() + " does not exist");
                 }
             }
 
@@ -54,17 +49,15 @@ public class OrderService {
                 throw new IllegalArgumentException("Order must contain at least one product");
             }
 
-            // Tạo order mới
             Order order = new Order();
             order.setUserId(request.getUserId());
             order.setTotal(request.getTotal());
-            order.setStatus(1); // PENDING status
+            order.setStatus(1); // PENDING
             order.setCreatedDate(LocalDate.now());
             Order savedOrder = orderRepository.save(order);
 
             log.info("Order created with ID: {}", savedOrder.getOrderId());
 
-            // Lưu chi tiết đơn hàng
             for (CreateOrderRequest.OrderItem item : request.getItems()) {
                 OrderDetail detail = OrderDetail.builder()
                         .orderId(savedOrder.getOrderId())
@@ -75,7 +68,6 @@ public class OrderService {
                 log.info("Saved order detail: Product {}, Quantity {}", item.getProductId(), item.getQuantity());
             }
 
-            log.info("Order creation completed successfully");
             return savedOrder;
 
         } catch (Exception e) {
@@ -84,89 +76,123 @@ public class OrderService {
         }
     }
 
-    /**
-     * FIXED: Enhanced user existence check with fallback mechanisms
-     */
-    private boolean userExists(Long userId) {
+    @Transactional
+    public void updateOrderStatus(Integer orderId, Integer status) {
         try {
-            log.info("Checking if user exists with ID: {}", userId);
+            log.info("Updating order {} status to {}", orderId, status);
 
-            // FIXED: Handle known demo users
-            if (isValidDemoUser(userId.intValue())) {
-                log.info("Demo user ID {} is valid", userId);
-                return true;
+            if (orderId == null || status == null) {
+                throw new IllegalArgumentException("Order ID and status cannot be null");
             }
 
-            // Try account service API
-            ApiResponse<Boolean> response = accountServiceClient.checkUserExists(userId);
-
-            if (response == null) {
-                log.warn("Received null response from account-service for user ID: {}", userId);
-                return handleUserValidationFallback(userId);
+            if (status < 0 || status > 3) {
+                throw new IllegalArgumentException("Invalid status: " + status);
             }
 
-            Boolean exists = response.getResult();
-            if (exists == null) {
-                log.warn("Received null result from account-service for user ID: {}", userId);
-                return handleUserValidationFallback(userId);
+            Order order = orderRepository.findById(orderId)
+                    .orElseThrow(() -> new IllegalArgumentException("Order not found: " + orderId));
+
+            Integer oldStatus = order.getStatus();
+
+            if (oldStatus != null && oldStatus.equals(status)) {
+                log.info("Order {} already has status {}", orderId, status);
+                return;
             }
 
-            log.info("User existence check for ID {}: {}", userId, exists);
-            return exists;
+            // Cập nhật trạng thái
+            order.setStatus(status);
+            orderRepository.save(order);
 
-        } catch (feign.FeignException.NotFound e) {
-            log.warn("User with ID {} not found in account-service (404): {}", userId, e.getMessage());
-            return handleUserValidationFallback(userId);
+            // CHỈ tính doanh thu khi chuyển thành "Đã giao hàng" (status = 3)
+            if (status == 3 && (oldStatus == null || oldStatus != 3)) {
+                updateRevenue(order);
+                log.info("Revenue updated for delivered order: {}", orderId);
+            }
 
-        } catch (feign.FeignException.Unauthorized e) {
-            log.error("401 Unauthorized when calling account-service for user ID: {}", userId);
-            log.error("Check if account-service SecurityConfig properly allows public access to /users/exists/**");
-            return handleUserValidationFallback(userId);
-
-        } catch (feign.FeignException e) {
-            log.error("Feign error when calling account-service for user ID {}: Status={}, Message={}",
-                    userId, e.status(), e.getMessage());
-            return handleUserValidationFallback(userId);
+            log.info("Order {} status updated: {} -> {}", orderId, oldStatus, status);
 
         } catch (Exception e) {
-            log.error("Unexpected error when checking user ID {}: {}", userId, e.getMessage(), e);
-            return handleUserValidationFallback(userId);
+            log.error("Error updating order status: {}", e.getMessage(), e);
+            throw new RuntimeException("Failed to update order status: " + e.getMessage());
         }
     }
 
-    /**
-     * FIXED: Check if user ID is a valid demo user
-     */
-    private boolean isValidDemoUser(Integer userId) {
-        // Allow certain user IDs for demo purposes
-        return userId != null && (
-                userId.equals(23) ||     // hq@gmail.com user
-                        userId.equals(999) ||    // guest user
-                        userId.equals(1) ||      // default admin
-                        userId.equals(2)         // default user
-        );
-    }
-
-    /**
-     * FIXED: Handle user validation fallback when account service is unavailable
-     */
-    private boolean handleUserValidationFallback(Long userId) {
+    // FIXED: Cập nhật doanh thu khi đơn hàng được giao
+    private void updateRevenue(Order order) {
         try {
-            // Check if it's a demo user
-            if (isValidDemoUser(userId.intValue())) {
-                log.info("Allowing demo user ID: {}", userId);
-                return true;
+            log.info("Updating revenue for delivered order: {}", order.getOrderId());
+
+            // Lấy ngày hiện tại để cập nhật doanh thu
+            LocalDate deliveryDate = LocalDate.now();
+
+            // FIXED: Cập nhật vào bảng doanh thu hoặc tạo bản ghi thống kê
+            String updateRevenueSql = """
+                INSERT INTO DOANHTHU (Ngay, TongDoanhThu, SoDonHang, NguoiCapNhat) 
+                VALUES (?, ?, 1, 'SYSTEM')
+                ON DUPLICATE KEY UPDATE 
+                    TongDoanhThu = TongDoanhThu + VALUES(TongDoanhThu),
+                    SoDonHang = SoDonHang + 1,
+                    NgayCapNhat = NOW()
+                """;
+
+            int rowsUpdated = jdbcTemplate.update(updateRevenueSql,
+                    deliveryDate,
+                    order.getTotal()
+            );
+
+            if (rowsUpdated > 0) {
+                log.info("Revenue updated successfully for order {}: +{} VND",
+                        order.getOrderId(), order.getTotal());
             }
 
-            // For production: you might want to query a local user cache or database
-            // For demo: allow orders to proceed to prevent blocking
-            log.warn("Account service unavailable, allowing order for user ID: {} (demo mode)", userId);
-            return true;
+            // FIXED: Cập nhật thống kê tổng doanh thu trong bảng cấu hình hệ thống
+            String updateTotalRevenueSql = """
+                INSERT INTO THONGKE (LoaiThongKe, GiaTri, NgayCapNhat) 
+                VALUES ('TOTAL_REVENUE', ?, NOW())
+                ON DUPLICATE KEY UPDATE 
+                    GiaTri = GiaTri + VALUES(GiaTri),
+                    NgayCapNhat = NOW()
+                """;
 
-        } catch (Exception fallbackError) {
-            log.error("Error in user validation fallback for ID {}: {}", userId, fallbackError.getMessage());
-            // In demo mode, allow orders to proceed
-            return true;
+            jdbcTemplate.update(updateTotalRevenueSql, order.getTotal());
+
+            log.info("Total revenue statistics updated for order: {}", order.getOrderId());
+
+        } catch (Exception e) {
+            log.error("Error updating revenue for order {}: {}", order.getOrderId(), e.getMessage());
+            // Không throw exception để không ảnh hưởng đến việc cập nhật trạng thái đơn hàng
+        }
+    }
+
+    // FIXED: Lấy thống kê doanh thu
+    public Long getTotalRevenue() {
+        try {
+            String sql = "SELECT COALESCE(SUM(GiaTri), 0) FROM THONGKE WHERE LoaiThongKe = 'TOTAL_REVENUE'";
+            return jdbcTemplate.queryForObject(sql, Long.class);
+        } catch (Exception e) {
+            log.error("Error getting total revenue: {}", e.getMessage());
+            return 0L;
+        }
+    }
+
+    // FIXED: Lấy doanh thu theo ngày
+    public Long getRevenueByDate(LocalDate date) {
+        try {
+            String sql = "SELECT COALESCE(TongDoanhThu, 0) FROM DOANHTHU WHERE Ngay = ?";
+            return jdbcTemplate.queryForObject(sql, Long.class, date);
+        } catch (Exception e) {
+            log.error("Error getting revenue by date {}: {}", date, e.getMessage());
+            return 0L;
+        }
+    }
+
+    // FIXED: Lấy số đơn hàng đã giao theo trạng thái
+    public Integer getOrderCountByStatus(Integer status) {
+        try {
+            return Math.toIntExact(orderRepository.countByStatus(status));
+        } catch (Exception e) {
+            log.error("Error getting order count by status {}: {}", status, e.getMessage());
+            return 0;
         }
     }
 
@@ -175,12 +201,10 @@ public class OrderService {
         try {
             log.info("Cancelling order: {}", orderId);
 
-            // FIXED: Better order cancellation with validation
             if (orderId == null) {
                 throw new IllegalArgumentException("Order ID cannot be null");
             }
 
-            // Check if order exists
             if (!orderRepository.existsById(orderId)) {
                 throw new IllegalArgumentException("Order with ID " + orderId + " does not exist");
             }
@@ -202,65 +226,59 @@ public class OrderService {
         }
     }
 
-    @Transactional
-    public void updateOrderStatus(Integer orderId, Integer status) {
+    private boolean userExists(Long userId) {
         try {
-            log.info("Updating order {} status to {}", orderId, status);
+            log.info("Checking if user exists with ID: {}", userId);
 
-            // FIXED: Enhanced order status update with validation
-            if (orderId == null) {
-                throw new IllegalArgumentException("Order ID cannot be null");
+            if (isValidDemoUser(userId.intValue())) {
+                log.info("Demo user ID {} is valid", userId);
+                return true;
             }
 
-            if (status == null) {
-                throw new IllegalArgumentException("Status cannot be null");
+            ApiResponse<Boolean> response = accountServiceClient.checkUserExists(userId);
+
+            if (response == null) {
+                log.warn("Received null response from account-service for user ID: {}", userId);
+                return handleUserValidationFallback(userId);
             }
 
-            // Validate status values
-            if (status < 0 || status > 3) {
-                throw new IllegalArgumentException("Invalid status value: " + status + ". Must be 0-3");
+            Boolean exists = response.getResult();
+            if (exists == null) {
+                log.warn("Received null result from account-service for user ID: {}", userId);
+                return handleUserValidationFallback(userId);
             }
 
-            Order order = orderRepository.findById(orderId)
-                    .orElseThrow(() -> new IllegalArgumentException("Order with ID " + orderId + " not found"));
-
-            // FIXED: Check if status change is valid
-            if (order.getStatus() != null && order.getStatus().equals(status)) {
-                log.info("Order {} already has status {}, no update needed", orderId, status);
-                return;
-            }
-
-            order.setStatus(status);
-            orderRepository.save(order);
-
-            log.info("Order {} status updated successfully to {}", orderId, status);
+            log.info("User existence check for ID {}: {}", userId, exists);
+            return exists;
 
         } catch (Exception e) {
-            log.error("Error updating order status for order {}: {}", orderId, e.getMessage(), e);
-            throw new RuntimeException("Failed to update order status: " + e.getMessage(), e);
+            log.error("Unexpected error when checking user ID {}: {}", userId, e.getMessage(), e);
+            return handleUserValidationFallback(userId);
         }
     }
 
-    // FIXED: Enhanced product info retrieval with error handling
-    public ProductResponseModel getProductInfo(Integer productId) {
+    private boolean isValidDemoUser(Integer userId) {
+        return userId != null && (
+                userId.equals(23) ||
+                        userId.equals(999) ||
+                        userId.equals(1) ||
+                        userId.equals(2)
+        );
+    }
+
+    private boolean handleUserValidationFallback(Long userId) {
         try {
-            if (productId == null) {
-                throw new IllegalArgumentException("Product ID cannot be null");
+            if (isValidDemoUser(userId.intValue())) {
+                log.info("Allowing demo user ID: {}", userId);
+                return true;
             }
 
-            log.info("Fetching product info for ID: {}", productId);
-            ProductResponseModel product = productServiceClient.getProductById(productId);
+            log.warn("Account service unavailable, allowing order for user ID: {} (demo mode)", userId);
+            return true;
 
-            if (product == null) {
-                log.warn("Product with ID {} not found", productId);
-                throw new IllegalArgumentException("Product with ID " + productId + " not found");
-            }
-
-            return product;
-
-        } catch (Exception e) {
-            log.error("Error fetching product info for ID {}: {}", productId, e.getMessage(), e);
-            throw new RuntimeException("Failed to get product info: " + e.getMessage(), e);
+        } catch (Exception fallbackError) {
+            log.error("Error in user validation fallback for ID {}: {}", userId, fallbackError.getMessage());
+            return true;
         }
     }
 }

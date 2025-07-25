@@ -1,4 +1,4 @@
-// FINAL AdminOrderDetail.js - Complete with customer info and order stats
+// FINAL AdminOrderDetail.js - Dữ liệu thực và disable khi đã giao
 import React, { useEffect, useState } from "react";
 import orderApiService from "../../services/api/orderApiService";
 import userService from "../../services/userService";
@@ -24,64 +24,44 @@ const AdminOrderDetail = ({ orderId, onBack }) => {
       setLoading(true);
       setError(null);
       
-      // FIXED: Create realistic order data for demo
-      const orderData = {
-        orderId: orderId,
-        userId: 23, // hq@gmail.com user ID
-        customerName: "Nguyễn Hồng Quân",
-        email: "hq@gmail.com",
-        phone: "0981293743",
-        address: "Xuân Lộc, Thanh Thủy, Phú Thọ",
-        total: 860000,
-        status: "PENDING",
-        createdDate: new Date().toISOString(),
-        shippingMethod: "Giao hàng tiêu chuẩn",
-        paymentMethod: "COD",
-        notes: "Giao hàng trong giờ hành chính",
-        items: [
-          { productId: 18, quantity: 2, price: 0 },
-          { productId: 25, quantity: 3, price: 0 }
-        ]
-      };
+      // FIXED: Lấy dữ liệu đơn hàng thực từ API
+      let orderData;
+      try {
+        orderData = await orderApiService.getOrderById(orderId);
+        console.log('Order data from API:', orderData);
+      } catch (apiError) {
+        console.error('Failed to fetch order from API:', apiError);
+        throw new Error('Không thể tải thông tin đơn hàng từ server');
+      }
 
-      // FIXED: Fetch real customer information from database
+      if (!orderData) {
+        throw new Error('Đơn hàng không tồn tại');
+      }
+
+      // FIXED: Tải thông tin khách hàng thực
       if (orderData.userId) {
         try {
           const customerResponse = await userService.getUserById(orderData.userId);
           if (customerResponse.success) {
-            const customer = customerResponse.data;
-            setCustomerInfo(customer);
-            
-            // Update order with real customer info
-            orderData.customerName = customer.ten;
-            orderData.email = customer.email;
-            orderData.phone = customer.sdt;
-            orderData.address = customer.diaChi;
-            
-            console.log('Customer info loaded:', customer);
+            setCustomerInfo(customerResponse.data);
+            console.log('Customer info loaded:', customerResponse.data);
           }
         } catch (customerError) {
           console.warn('Could not fetch customer info:', customerError);
         }
       }
 
-      // FIXED: Fetch real product details and calculate accurate prices
+      // FIXED: Tải chi tiết sản phẩm thực từ order items
       if (orderData.items && orderData.items.length > 0) {
         const productPromises = orderData.items.map(async (item) => {
           try {
             const product = await apiService.getProductById(item.productId);
             if (product) {
-              // Set accurate price from product data
-              item.price = product.giaTien;
-              item.productName = product.tenSP;
-              
-              console.log(`Product ${item.productId} loaded:`, product);
-              
               return {
                 [item.productId]: {
                   ...product,
                   orderQuantity: item.quantity,
-                  orderPrice: item.price
+                  orderPrice: product.giaTien
                 }
               };
             }
@@ -103,29 +83,12 @@ const AdminOrderDetail = ({ orderId, onBack }) => {
           });
           
           setProductDetails(productDetailsMap);
-
-          // FIXED: Calculate accurate total
-          let calculatedTotal = 0;
-          orderData.items.forEach(item => {
-            if (item.price && item.quantity) {
-              calculatedTotal += item.price * item.quantity;
-            }
-          });
-          
-          if (calculatedTotal > 0) {
-            orderData.total = calculatedTotal;
-          }
-
-          console.log('Product details loaded:', productDetailsMap);
-          console.log('Calculated total:', calculatedTotal);
-
         } catch (error) {
           console.error('Error fetching product details:', error);
         }
       }
 
       setOrder(orderData);
-      console.log('Final order data:', orderData);
       
     } catch (error) {
       console.error('Error fetching order detail:', error);
@@ -158,65 +121,58 @@ const AdminOrderDetail = ({ orderId, onBack }) => {
   };
 
   const getStatusColor = (status) => {
-    const statusStr = (status || '').toString().toUpperCase();
-    
-    switch (statusStr) {
-      case 'PENDING':
-        return '#f59e0b';
-      case 'CONFIRMED':
-        return '#3b82f6';
-      case 'SHIPPED':
-        return '#8b5cf6';
-      case 'DELIVERED':
-        return '#10b981';
-      case 'CANCELLED':
-        return '#ef4444';
-      default:
-        return '#6b7280';
-    }
+    const colorMap = {
+      0: '#ef4444',
+      1: '#f59e0b',
+      2: '#3b82f6',
+      3: '#10b981',
+      'PENDING': '#f59e0b',
+      'CONFIRMED': '#3b82f6',
+      'SHIPPED': '#8b5cf6',
+      'DELIVERED': '#10b981',
+      'CANCELLED': '#ef4444'
+    };
+    return colorMap[status] || '#6b7280';
   };
 
   const getStatusText = (status) => {
-    const statusStr = (status || '').toString().toUpperCase();
-    
-    switch (statusStr) {
-      case 'PENDING':
-        return 'Chờ xác nhận';
-      case 'CONFIRMED':
-        return 'Đã xác nhận';
-      case 'SHIPPED':
-        return 'Đang giao hàng';
-      case 'DELIVERED':
-        return 'Đã giao hàng';
-      case 'CANCELLED':
-        return 'Đã hủy';
-      default:
-        return status || 'Không xác định';
-    }
+    const statusMap = {
+      0: 'Đã hủy',
+      1: 'Chờ xác nhận',
+      2: 'Đã xác nhận',
+      3: 'Đã giao hàng',
+      'PENDING': 'Chờ xác nhận',
+      'CONFIRMED': 'Đã xác nhận',
+      'SHIPPED': 'Đang giao hàng',
+      'DELIVERED': 'Đã giao hàng',
+      'CANCELLED': 'Đã hủy'
+    };
+    return statusMap[status] || status || 'Không xác định';
   };
 
-  // FIXED: Handle status update with stats update
+  // FIXED: Cập nhật trạng thái với xử lý doanh thu
   const handleStatusUpdate = async (newStatus) => {
     try {
       setUpdating(true);
       
-      // FIXED: Update product quantities when order is delivered
-      if (newStatus === 'DELIVERED' && order.status !== 'DELIVERED') {
+      const oldStatus = order.status;
+      
+      // Gọi API cập nhật trạng thái
+      await orderApiService.updateOrderStatus(orderId, newStatus);
+      
+      // Cập nhật kho hàng CHỈ khi chuyển thành "Đã giao hàng" (status = 3)
+      if (newStatus === 3 && oldStatus !== 3) {
         await updateProductQuantitiesOnDelivery();
+        notificationManager.success(`💰 Đã cập nhật doanh thu: +${formatPrice(order.total)}`);
       }
       
-      try {
-        await orderApiService.updateOrderStatus(orderId, newStatus);
-        notificationManager.success('Cập nhật trạng thái thành công');
-      } catch (apiError) {
-        console.warn('API update failed, using local update:', apiError);
-        notificationManager.success('Cập nhật trạng thái thành công (Demo mode)');
-      }
-      
+      // Cập nhật UI
       setOrder(prev => ({
         ...prev,
         status: newStatus
       }));
+
+      notificationManager.success(`Cập nhật trạng thái thành công: ${getStatusText(newStatus)}`);
       
     } catch (error) {
       console.error('Error updating order status:', error);
@@ -226,7 +182,7 @@ const AdminOrderDetail = ({ orderId, onBack }) => {
     }
   };
 
-  // FIXED: Update product quantities when order is delivered
+  // FIXED: Cập nhật số lượng sản phẩm khi giao hàng
   const updateProductQuantitiesOnDelivery = async () => {
     try {
       if (!order.items || order.items.length === 0) return;
@@ -247,15 +203,13 @@ const AdminOrderDetail = ({ orderId, onBack }) => {
 
           await apiService.updateProduct(item.productId, updateData);
           
-          console.log(`Updated product ${item.productId}: stock ${product.soLuongTrongKho} -> ${newQuantity}, sold ${product.soLuongDaBan || 0} -> ${newSoldQuantity}`);
-          
         } catch (error) {
           console.error(`Error updating product ${item.productId}:`, error);
         }
       });
 
       await Promise.all(updatePromises);
-      notificationManager.success('Đã cập nhật kho hàng và thống kê bán hàng');
+      console.log('Inventory and sales statistics updated successfully');
       
     } catch (error) {
       console.error('Error updating product quantities:', error);
@@ -307,6 +261,9 @@ const AdminOrderDetail = ({ orderId, onBack }) => {
     );
   }
 
+  // FIXED: Kiểm tra xem đơn hàng đã giao hay chưa
+  const isDelivered = order.status === 3;
+
   return (
     <div className="admin-order-detail">
       <div className="detail-header">
@@ -334,7 +291,7 @@ const AdminOrderDetail = ({ orderId, onBack }) => {
 
       <div className="detail-content">
         <div className="detail-grid">
-          {/* FIXED: Customer Information with real data */}
+          {/* Thông tin khách hàng */}
           <div className="detail-section">
             <h3>👤 Thông tin khách hàng</h3>
             <div className="info-grid">
@@ -344,30 +301,24 @@ const AdminOrderDetail = ({ orderId, onBack }) => {
               </div>
               <div className="info-item">
                 <label>Họ tên:</label>
-                <span>{customerInfo?.ten || order.customerName}</span>
+                <span>{customerInfo?.ten || `User ${order.userId}`}</span>
               </div>
               <div className="info-item">
                 <label>Email:</label>
-                <span>{customerInfo?.email || order.email}</span>
+                <span>{customerInfo?.email || 'N/A'}</span>
               </div>
               <div className="info-item">
                 <label>Số điện thoại:</label>
-                <span>{customerInfo?.sdt || order.phone}</span>
+                <span>{customerInfo?.sdt || 'N/A'}</span>
               </div>
               <div className="info-item full-width">
                 <label>Địa chỉ giao hàng:</label>
-                <span>{customerInfo?.diaChi || order.address}</span>
+                <span>{customerInfo?.diaChi || 'N/A'}</span>
               </div>
-              {order.notes && (
-                <div className="info-item full-width">
-                  <label>Ghi chú:</label>
-                  <span>{order.notes}</span>
-                </div>
-              )}
             </div>
           </div>
 
-          {/* Order Information */}
+          {/* Thông tin đơn hàng */}
           <div className="detail-section">
             <h3>📦 Thông tin đơn hàng</h3>
             <div className="info-grid">
@@ -380,37 +331,43 @@ const AdminOrderDetail = ({ orderId, onBack }) => {
                 <span>{formatDate(order.createdDate)}</span>
               </div>
               <div className="info-item">
-                <label>Phương thức giao hàng:</label>
-                <span>{order.shippingMethod || 'Giao hàng tiêu chuẩn'}</span>
-              </div>
-              <div className="info-item">
-                <label>Phương thức thanh toán:</label>
-                <span>{order.paymentMethod || 'COD'}</span>
-              </div>
-              <div className="info-item">
                 <label>Tổng tiền:</label>
                 <span className="total-amount">{formatPrice(order.total)}</span>
               </div>
               <div className="info-item">
                 <label>Trạng thái:</label>
+                {/* FIXED: Disable select khi đã giao hàng */}
                 <select 
-                  value={order.status || 'PENDING'} 
-                  onChange={(e) => handleStatusUpdate(e.target.value)}
-                  disabled={updating}
+                  value={order.status || 1} 
+                  onChange={(e) => handleStatusUpdate(parseInt(e.target.value))}
+                  disabled={updating || isDelivered}
                   className="status-select"
+                  style={{
+                    backgroundColor: getStatusColor(order.status),
+                    color: 'white',
+                    border: 'none',
+                    padding: '0.5rem',
+                    borderRadius: '6px',
+                    opacity: isDelivered ? 0.7 : 1,
+                    cursor: isDelivered ? 'not-allowed' : 'pointer'
+                  }}
                 >
-                  <option value="PENDING">Chờ xác nhận</option>
-                  <option value="CONFIRMED">Đã xác nhận</option>
-                  <option value="SHIPPED">Đang giao hàng</option>
-                  <option value="DELIVERED">Đã giao hàng</option>
-                  <option value="CANCELLED">Đã hủy</option>
+                  <option value={1}>Chờ xác nhận</option>
+                  <option value={2}>Đã xác nhận</option>
+                  <option value={3}>Đã giao hàng</option>
+                  <option value={0}>Đã hủy</option>
                 </select>
+                {isDelivered && (
+                  <div style={{ fontSize: '0.8rem', color: '#6b7280', marginTop: '0.25rem' }}>
+                    ✅ Đơn hàng đã hoàn thành
+                  </div>
+                )}
               </div>
             </div>
           </div>
         </div>
 
-        {/* FIXED: Order Items with real product details and prices */}
+        {/* Sản phẩm trong đơn hàng */}
         <div className="detail-section full-width">
           <h3>🛒 Sản phẩm trong đơn hàng</h3>
           <div className="items-table">
@@ -428,14 +385,14 @@ const AdminOrderDetail = ({ orderId, onBack }) => {
                 {order.items && order.items.length > 0 ? (
                   order.items.map((item, index) => {
                     const product = productDetails[item.productId];
-                    const unitPrice = item.price || product?.giaTien || 0;
+                    const unitPrice = product?.giaTien || 0;
                     const totalPrice = unitPrice * item.quantity;
                     
                     return (
                       <tr key={item.productId || index}>
                         <td>#{item.productId}</td>
                         <td>
-                          {product?.tenSP || item.productName || `Sản phẩm ${item.productId}`}
+                          {product?.tenSP || `Sản phẩm ${item.productId}`}
                         </td>
                         <td className="text-center">{item.quantity}</td>
                         <td className="text-right">{formatPrice(unitPrice)}</td>
@@ -469,47 +426,40 @@ const AdminOrderDetail = ({ orderId, onBack }) => {
             ← Quay lại danh sách
           </button>
           
-          <div className="action-group">
-            {order.status === 'PENDING' && (
-              <button 
-                onClick={() => handleStatusUpdate('CONFIRMED')}
-                className="btn-primary"
-                disabled={updating}
-              >
-                ✅ Xác nhận đơn hàng
-              </button>
-            )}
-            
-            {order.status === 'CONFIRMED' && (
-              <button 
-                onClick={() => handleStatusUpdate('SHIPPED')}
-                className="btn-primary"
-                disabled={updating}
-              >
-                🚚 Giao hàng
-              </button>
-            )}
-            
-            {order.status === 'SHIPPED' && (
-              <button 
-                onClick={() => handleStatusUpdate('DELIVERED')}
-                className="btn-success"
-                disabled={updating}
-              >
-                📦 Đã giao hàng
-              </button>
-            )}
-            
-            {['PENDING', 'CONFIRMED'].includes(order.status) && (
-              <button 
-                onClick={() => handleStatusUpdate('CANCELLED')}
-                className="btn-danger"
-                disabled={updating}
-              >
-                ❌ Hủy đơn hàng
-              </button>
-            )}
-          </div>
+          {/* FIXED: Chỉ hiện button khi chưa giao hàng */}
+          {!isDelivered && (
+            <div className="action-group">
+              {order.status === 1 && (
+                <button 
+                  onClick={() => handleStatusUpdate(2)}
+                  className="btn-primary"
+                  disabled={updating}
+                >
+                  ✅ Xác nhận đơn hàng
+                </button>
+              )}
+              
+              {order.status === 2 && (
+                <button 
+                  onClick={() => handleStatusUpdate(3)}
+                  className="btn-success"
+                  disabled={updating}
+                >
+                  📦 Đã giao hàng
+                </button>
+              )}
+              
+              {[1, 2].includes(order.status) && (
+                <button 
+                  onClick={() => handleStatusUpdate(0)}
+                  className="btn-danger"
+                  disabled={updating}
+                >
+                  ❌ Hủy đơn hàng
+                </button>
+              )}
+            </div>
+          )}
         </div>
       </div>
 
