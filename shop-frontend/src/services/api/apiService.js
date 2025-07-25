@@ -1,4 +1,4 @@
-// FIXED apiService.js - Khắc phục CORS và API integration
+// FIXED apiService.js - Loại bỏ hoàn toàn dữ liệu demo
 const API_BASE_URL = 'http://localhost:8000/api';
 
 class ApiService {
@@ -14,7 +14,7 @@ class ApiService {
         ...options.headers,
       },
       credentials: 'include',
-      mode: 'cors', // Explicitly set CORS mode
+      mode: 'cors',
       ...options,
     };
 
@@ -22,7 +22,6 @@ class ApiService {
       const response = await fetch(url, config);
       
       if (!response.ok) {
-        // Better error handling for different status codes
         switch (response.status) {
           case 404:
             throw new Error(`Resource not found: ${endpoint}`);
@@ -47,34 +46,32 @@ class ApiService {
     }
   }
 
-  // Products API - Sử dụng ProductQueryController có sẵn
+  // FIXED: Products API - Không có fallback data
   async getProducts() {
     try {
-      return await this.request('/v1/products');
+      const data = await this.request('/v1/products');
+      
+      // Chỉ trả về data thật từ API, không có fallback
+      if (!Array.isArray(data)) {
+        console.warn('Invalid products data format from API');
+        return [];
+      }
+      
+      return data;
     } catch (error) {
-      console.warn('Products API error, using fallback:', error);
-      // Fallback data for demo
-      return [
-        {
-          maSP: 1,
-          tenSP: 'Máy giặt Samsung Demo',
-          giaTien: 5000000,
-          soLuongTrongKho: 10,
-          soLuongDaBan: 5,
-          anh1: 'demo1.jpg',
-          maDanhMuc: 1,
-          maHang: 1,
-          moTa: 'Sản phẩm demo'
-        }
-      ];
+      console.error('Products API error:', error);
+      // FIXED: Không trả về demo data, trả về array rỗng
+      return [];
     }
   }
 
   async getProductById(maSP) {
     try {
-      return await this.request(`/v1/products/${maSP}`);
+      const data = await this.request(`/v1/products/${maSP}`);
+      return data;
     } catch (error) {
-      console.warn(`Product ${maSP} not found, using fallback`);
+      console.error(`Product ${maSP} not found:`, error);
+      // FIXED: Không trả về demo data
       return null;
     }
   }
@@ -87,13 +84,7 @@ class ApiService {
       });
     } catch (error) {
       console.error('Error adding product:', error);
-      // Simulate success for demo
-      const newProduct = {
-        maSP: Date.now(),
-        ...productData
-      };
-      console.warn('Simulated product creation:', newProduct);
-      return newProduct;
+      throw error; // FIXED: Throw error thay vì simulate success
     }
   }
 
@@ -105,13 +96,7 @@ class ApiService {
       });
     } catch (error) {
       console.error('Error updating product:', error);
-      // Simulate success for demo
-      const updatedProduct = {
-        maSP: maSP,
-        ...productData
-      };
-      console.warn('Simulated product update:', updatedProduct);
-      return updatedProduct;
+      throw error; // FIXED: Throw error thay vì simulate success
     }
   }
 
@@ -122,28 +107,25 @@ class ApiService {
       });
     } catch (error) {
       console.error('Error deleting product:', error);
-      console.warn('Simulated product deletion for ID:', maSP);
-      return { success: true };
+      throw error; // FIXED: Throw error thay vì simulate success
     }
   }
 
-  // FIXED: Brands API với fallback data
+  // FIXED: Brands API - Không có fallback data
   async getBrands() {
     try {
-      return await this.request('/v1/brands');
+      const data = await this.request('/v1/brands');
+      
+      if (!Array.isArray(data)) {
+        console.warn('Invalid brands data format from API');
+        return [];
+      }
+      
+      return data;
     } catch (error) {
-      console.warn('Brand API not available, using fallback data:', error);
-      // Fallback brands data
-      return [
-        { maHang: 1, tenHang: 'Samsung' },
-        { maHang: 2, tenHang: 'LG' },
-        { maHang: 3, tenHang: 'Panasonic' },
-        { maHang: 4, tenHang: 'Toshiba' },
-        { maHang: 5, tenHang: 'Sharp' },
-        { maHang: 6, tenHang: 'Kangaroo' },
-        { maHang: 7, tenHang: 'Electrolux' },
-        { maHang: 8, tenHang: 'Daikin' }
-      ];
+      console.error('Brands API error:', error);
+      // FIXED: Không trả về demo data
+      return [];
     }
   }
 
@@ -157,13 +139,7 @@ class ApiService {
       });
     } catch (error) {
       console.error('Error adding brand:', error);
-      // Simulate success với fallback
-      const newBrand = {
-        maHang: Date.now(),
-        tenHang: brandData.tenHang
-      };
-      console.warn('Simulated brand creation:', newBrand);
-      return newBrand;
+      throw error; // FIXED: Throw error thay vì simulate success
     }
   }
 
@@ -178,13 +154,7 @@ class ApiService {
       });
     } catch (error) {
       console.error('Error updating brand:', error);
-      // Simulate success với fallback
-      const updatedBrand = {
-        maHang: id,
-        tenHang: brandData.tenHang
-      };
-      console.warn('Simulated brand update:', updatedBrand);
-      return updatedBrand;
+      throw error; // FIXED: Throw error thay vì simulate success
     }
   }
 
@@ -195,28 +165,25 @@ class ApiService {
       });
     } catch (error) {
       console.error('Error deleting brand:', error);
-      console.warn('Simulated brand deletion for ID:', id);
-      return { success: true };
+      throw error; // FIXED: Throw error thay vì simulate success
     }
   }
 
-  // FIXED: Categories API với fallback data
+  // FIXED: Categories API - Không có fallback data
   async getCategories() {
     try {
-      return await this.request('/v1/categories');
+      const data = await this.request('/v1/categories');
+      
+      if (!Array.isArray(data)) {
+        console.warn('Invalid categories data format from API');
+        return [];
+      }
+      
+      return data;
     } catch (error) {
-      console.warn('Category API not available, using fallback data:', error);
-      // Fallback categories data
-      return [
-        { maDanhMuc: 1, tenDanhMuc: 'Máy giặt' },
-        { maDanhMuc: 2, tenDanhMuc: 'Điều hòa' },
-        { maDanhMuc: 3, tenDanhMuc: 'Tủ lạnh' },
-        { maDanhMuc: 4, tenDanhMuc: 'Ti vi' },
-        { maDanhMuc: 5, tenDanhMuc: 'Máy lọc nước' },
-        { maDanhMuc: 6, tenDanhMuc: 'Nồi cơm điện' },
-        { maDanhMuc: 7, tenDanhMuc: 'Quạt điện' },
-        { maDanhMuc: 8, tenDanhMuc: 'Lò vi sóng' }
-      ];
+      console.error('Categories API error:', error);
+      // FIXED: Không trả về demo data
+      return [];
     }
   }
 
@@ -230,13 +197,7 @@ class ApiService {
       });
     } catch (error) {
       console.error('Error adding category:', error);
-      // Simulate success với fallback
-      const newCategory = {
-        maDanhMuc: Date.now(),
-        tenDanhMuc: categoryData.tenDanhMuc
-      };
-      console.warn('Simulated category creation:', newCategory);
-      return newCategory;
+      throw error; // FIXED: Throw error thay vì simulate success
     }
   }
 
@@ -251,13 +212,7 @@ class ApiService {
       });
     } catch (error) {
       console.error('Error updating category:', error);
-      // Simulate success với fallback
-      const updatedCategory = {
-        maDanhMuc: id,
-        tenDanhMuc: categoryData.tenDanhMuc
-      };
-      console.warn('Simulated category update:', updatedCategory);
-      return updatedCategory;
+      throw error; // FIXED: Throw error thay vì simulate success
     }
   }
 
@@ -268,8 +223,7 @@ class ApiService {
       });
     } catch (error) {
       console.error('Error deleting category:', error);
-      console.warn('Simulated category deletion for ID:', id);
-      return { success: true };
+      throw error; // FIXED: Throw error thay vì simulate success
     }
   }
 

@@ -1,4 +1,4 @@
-// FIXED CustomerShop.js - Use passed auth state
+// FIXED CustomerShop.js - Xử lý đúng khi không có dữ liệu từ API
 import React, { useState, useEffect } from 'react';
 import apiService from '../../services/api/apiService';
 import authService from '../../services/api/authService';
@@ -19,6 +19,7 @@ const CustomerShop = ({ onModeChange, onLoginSuccess, authState }) => {
   const [showProductDetail, setShowProductDetail] = useState(false);
   const [showCheckout, setShowCheckout] = useState(false);
   const [currentImageIndex, setCurrentImageIndex] = useState(0);
+  const [hasApiError, setHasApiError] = useState(false); // FIXED: Track API errors
   
   // FIXED: Use auth state from App instead of local state
   const isAuthenticated = authState?.isAuthenticated || false;
@@ -42,31 +43,54 @@ const CustomerShop = ({ onModeChange, onLoginSuccess, authState }) => {
     { value: 'best-selling', label: 'Bán chạy' }
   ];
 
-  // Load products
+  // FIXED: Load products without demo data
   useEffect(() => {
     const fetchProducts = async () => {
       setLoading(true);
+      setHasApiError(false);
+      
       try {
         const res = await apiService.getProducts();
-        if (!Array.isArray(res)) throw new Error('Dữ liệu không hợp lệ');
-  
-        const valid = res.filter(p =>
-          p && p.maSP && p.tenSP &&
-          typeof p.giaTien === 'number' &&
-          typeof p.soLuongTrongKho === 'number'
-        );
-  
-        setProducts(valid);
-        notificationManager.success(`Đã tải ${valid.length} sản phẩm`);
+        
+        if (!Array.isArray(res)) {
+          console.warn('Invalid products data format');
+          setProducts([]);
+          setHasApiError(true);
+          return;
+        }
+
+        // FIXED: Validate and filter products properly
+        const validProducts = res.filter(p => {
+          return p && 
+                 p.maSP && 
+                 p.tenSP && 
+                 typeof p.giaTien === 'number' && 
+                 typeof p.soLuongTrongKho === 'number' &&
+                 p.giaTien > 0;
+        });
+
+        setProducts(validProducts);
+
+        if (validProducts.length === 0) {
+          if (res.length > 0) {
+            console.warn('Some products were filtered out due to invalid data');
+            notificationManager.warning('Một số sản phẩm có dữ liệu không hợp lệ');
+          }
+          setHasApiError(true);
+        } else {
+          notificationManager.success(`Đã tải ${validProducts.length} sản phẩm`);
+        }
+
       } catch (err) {
-        console.error('Lỗi tải sản phẩm:', err);
+        console.error('Error loading products:', err);
         setProducts([]);
-        notificationManager.error('Không thể tải sản phẩm từ hệ thống');
+        setHasApiError(true);
+        notificationManager.error('Không thể kết nối tới server sản phẩm');
       } finally {
         setLoading(false);
       }
     };
-  
+
     fetchProducts();
   }, []);
 
@@ -349,12 +373,34 @@ const CustomerShop = ({ onModeChange, onLoginSuccess, authState }) => {
     }
   };
 
+  // FIXED: Loading state
   if (loading) {
     return (
       <div className="customer-shop">
         <div className="loading-container">
           <div className="loading-spinner"></div>
-          <p>Đang tải sản phẩm...</p>
+          <p>Đang tải sản phẩm từ server...</p>
+        </div>
+      </div>
+    );
+  }
+
+  // FIXED: Show appropriate message when no data available
+  if (hasApiError && products.length === 0) {
+    return (
+      <div className="customer-shop">
+        <div className="shop-content">
+          <div className="no-products-available">
+            <h3>Cửa hàng hiện đang bảo trì</h3>
+            <p>Hệ thống sản phẩm đang được cập nhật.</p>
+            <p>Vui lòng quay lại sau!</p>
+            <button 
+              className="retry-btn"
+              onClick={() => window.location.reload()}
+            >
+              🔄 Thử lại
+            </button>
+          </div>
         </div>
       </div>
     );
