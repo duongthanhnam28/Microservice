@@ -1,8 +1,7 @@
-// BYPASS ApiService.js - Tắt hoàn toàn CORS calls
+// FIXED apiService.js - Kết nối thực tế với backend APIs
 const API_BASE_URL = 'http://localhost:8000/api';
 
 class ApiService {
-  // FIXED: Helper method chỉ gọi API products, bypass brands/categories
   async request(endpoint, options = {}) {
     const url = `${API_BASE_URL}${endpoint}`;
     const config = {
@@ -38,138 +37,97 @@ class ApiService {
       
       return await response.text();
     } catch (error) {
-      console.warn(`⚠️ API error for ${endpoint}:`, error.message);
+      console.error(`API error for ${endpoint}:`, error.message);
       throw error;
     }
   }
 
-  // FIXED: Products API - Chỉ gọi khi cần thiết
+  // Products API
   async getProducts() {
-    try {
-      const data = await this.request('/v1/products');
-      
-      if (!Array.isArray(data)) {
-        console.warn('Invalid products data format from API');
-        return [];
-      }
-      
-      return data;
-    } catch (error) {
-      console.error('Products API error:', error);
-      return [];
-    }
+    const data = await this.request('/v1/products');
+    return Array.isArray(data) ? data : [];
   }
 
   async getProductById(maSP) {
-    try {
-      const data = await this.request(`/v1/products/${maSP}`);
-      return data;
-    } catch (error) {
-      console.error(`Product ${maSP} not found:`, error);
-      return null;
-    }
+    return await this.request(`/v1/products/${maSP}`);
   }
 
-  // FIXED: Brands API - HOÀN TOÀN BYPASS, không gọi API
-  async getBrands() {
-    console.log('🚫 Brands API bypassed - returning empty array');
-    return Promise.resolve([]);
-  }
-
-  // FIXED: Categories API - HOÀN TOÀN BYPASS, không gọi API  
-  async getCategories() {
-    console.log('🚫 Categories API bypassed - returning empty array');
-    return Promise.resolve([]);
-  }
-
-  // FIXED: CRUD operations - Chỉ simulate cho products
   async addProduct(productData) {
-    try {
-      return await this.request('/v1/products', {
-        method: 'POST',
-        body: JSON.stringify(productData),
-      });
-    } catch (error) {
-      console.error('Error adding product:', error);
-      throw error;
-    }
+    return await this.request('/v1/products', {
+      method: 'POST',
+      body: JSON.stringify(productData),
+    });
   }
 
   async updateProduct(maSP, productData) {
-    try {
-      return await this.request(`/v1/products/${maSP}`, {
-        method: 'PUT',
-        body: JSON.stringify(productData),
-      });
-    } catch (error) {
-      console.error('Error updating product:', error);
-      throw error;
-    }
+    return await this.request(`/v1/products/${maSP}`, {
+      method: 'PUT',
+      body: JSON.stringify(productData),
+    });
   }
 
   async deleteProduct(maSP) {
-    try {
-      return await this.request(`/v1/products/${maSP}`, {
-        method: 'DELETE',
-      });
-    } catch (error) {
-      console.error('Error deleting product:', error);
-      throw error;
-    }
+    return await this.request(`/v1/products/${maSP}`, {
+      method: 'DELETE',
+    });
   }
 
-  // FIXED: Brand operations - SIMULATE SUCCESS, không gọi API
+  // Brands API
+  async getBrands() {
+    const data = await this.request('/v1/brands');
+    return Array.isArray(data) ? data : [];
+  }
+
   async addBrand(brandData) {
-    console.log('🔄 Simulating brand creation:', brandData);
-    return Promise.resolve({
-      maHang: Date.now(),
-      tenHang: brandData.tenHang,
-      created: true
+    return await this.request('/v1/brands', {
+      method: 'POST',
+      body: JSON.stringify(brandData),
     });
   }
 
   async updateBrand(id, brandData) {
-    console.log('🔄 Simulating brand update:', id, brandData);
-    return Promise.resolve({
-      maHang: id,
-      tenHang: brandData.tenHang,
-      updated: true
+    return await this.request(`/v1/brands/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(brandData),
     });
   }
 
   async deleteBrand(id) {
-    console.log('🔄 Simulating brand deletion:', id);
-    return Promise.resolve({ deleted: true });
+    return await this.request(`/v1/brands/${id}`, {
+      method: 'DELETE',
+    });
   }
 
-  // FIXED: Category operations - SIMULATE SUCCESS, không gọi API
+  // Categories API
+  async getCategories() {
+    const data = await this.request('/v1/categories');
+    return Array.isArray(data) ? data : [];
+  }
+
   async addCategory(categoryData) {
-    console.log('🔄 Simulating category creation:', categoryData);
-    return Promise.resolve({
-      maDanhMuc: Date.now(),
-      tenDanhMuc: categoryData.tenDanhMuc,
-      created: true
+    return await this.request('/v1/categories', {
+      method: 'POST',
+      body: JSON.stringify(categoryData),
     });
   }
 
   async updateCategory(id, categoryData) {
-    console.log('🔄 Simulating category update:', id, categoryData);
-    return Promise.resolve({
-      maDanhMuc: id,
-      tenDanhMuc: categoryData.tenDanhMuc,
-      updated: true
+    return await this.request(`/v1/categories/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(categoryData),
     });
   }
 
   async deleteCategory(id) {
-    console.log('🔄 Simulating category deletion:', id);
-    return Promise.resolve({ deleted: true });
+    return await this.request(`/v1/categories/${id}`, {
+      method: 'DELETE',
+    });
   }
 
   // File handling
   getFileUrl(filename) {
     if (!filename) return 'https://via.placeholder.com/300x200?text=No+Image';
-    return `${API_BASE_URL}/files/${filename}`;
+    return `http://localhost:9010/api/files/${filename}`;
   }
 }
 

@@ -1,4 +1,5 @@
-const ORDER_API_BASE_URL = 'http://localhost:9003/api/v1/orders';
+// FIXED orderApiService.js - Thêm method getAllOrders
+const ORDER_API_BASE_URL = 'http://localhost:8000/api/v1/orders';
 
 class OrderApiService {
   async request(endpoint = '', options = {}) {
@@ -10,6 +11,7 @@ class OrderApiService {
       },
       ...options,
     };
+    
     try {
       const response = await fetch(url, config);
       if (!response.ok) {
@@ -53,7 +55,12 @@ class OrderApiService {
   async getOrderById(orderId) {
     return await this.request(`/${orderId}`);
   }
+
+  // FIXED: Thêm method getAllOrders cho admin
+  async getAllOrders() {
+    return await this.request();
+  }
 }
 
 const orderApiService = new OrderApiService();
-export default orderApiService; 
+export default orderApiService;

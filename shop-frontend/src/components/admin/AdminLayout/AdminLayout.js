@@ -1,4 +1,4 @@
-// FIXED AdminLayout.js - Handle missing APIs gracefully
+// FIXED AdminLayout.js - Kết nối thực tế với APIs, không dùng demo data
 import React, { useState, useEffect } from 'react';
 import apiService from '../../../services/api/apiService';
 import { notificationManager } from '../../layout/Notification/Notification';
@@ -44,139 +44,48 @@ const AdminLayout = ({ onModeChange }) => {
   // Orders states
   const [selectedOrderId, setSelectedOrderId] = useState(null);
 
-  // FIXED: API availability status
-  const [apiStatus, setApiStatus] = useState({
-    products: 'unknown',
-    brands: 'unknown', 
-    categories: 'unknown'
-  });
-
-  // Menu configuration - FIXED: Điều chỉnh dựa trên API availability
-  const getMenuItems = () => {
-    const baseItems = [
-      { id: 'dashboard', title: 'Trang chủ', icon: '🏠' },
-      { id: 'products', title: 'Quản lý sản phẩm', icon: '📦' }
-    ];
-
-    // Chỉ thêm brands/categories nếu API available
-    if (apiStatus.brands === 'available') {
-      baseItems.push({ id: 'brands', title: 'Quản lý thương hiệu', icon: '🏷️' });
-    }
-    
-    if (apiStatus.categories === 'available') {
-      baseItems.push({ id: 'categories', title: 'Quản lý danh mục', icon: '📂' });
-    }
-
-    baseItems.push({ id: 'orders', title: 'Quản lý đơn hàng', icon: '🧾' });
-    
-    return baseItems;
-  };
-
-  // FIXED: Load data với error handling tốt hơn
+  // Load data khi thay đổi menu
   useEffect(() => {
     const loadData = async () => {
       setLoading(true);
       try {
         switch (activeMenu) {
           case 'products':
-            try {
-              const productsData = await apiService.getProducts();
-              setProducts(productsData);
-              setApiStatus(prev => ({ ...prev, products: 'available' }));
-            } catch (error) {
-              console.warn('Products API not available');
-              setProducts([]);
-              setApiStatus(prev => ({ ...prev, products: 'unavailable' }));
-            }
+            const productsData = await apiService.getProducts();
+            setProducts(productsData);
+            console.log('Loaded products:', productsData.length);
             break;
             
           case 'brands':
-            try {
-              const brandsData = await apiService.getBrands();
-              setBrands(brandsData);
-              setApiStatus(prev => ({ ...prev, brands: 'available' }));
-            } catch (error) {
-              console.warn('Brands API not available');
-              setBrands([]);
-              setApiStatus(prev => ({ ...prev, brands: 'unavailable' }));
-            }
+            const brandsData = await apiService.getBrands();
+            setBrands(brandsData);
+            console.log('Loaded brands:', brandsData.length);
             break;
             
           case 'categories':
-            try {
-              const categoriesData = await apiService.getCategories();
-              setCategories(categoriesData);
-              setApiStatus(prev => ({ ...prev, categories: 'available' }));
-            } catch (error) {
-              console.warn('Categories API not available');
-              setCategories([]);
-              setApiStatus(prev => ({ ...prev, categories: 'unavailable' }));
-            }
+            const categoriesData = await apiService.getCategories();
+            setCategories(categoriesData);
+            console.log('Loaded categories:', categoriesData.length);
             break;
             
           case 'dashboard':
-            // FIXED: Load dashboard stats với error handling
-            try {
-              const [productsCount, brandsCount, categoriesCount] = await Promise.allSettled([
-                apiService.getProducts().then(data => {
-                  setApiStatus(prev => ({ ...prev, products: 'available' }));
-                  return Array.isArray(data) ? data.length : 0;
-                }),
-                apiService.getBrands().then(data => {
-                  setApiStatus(prev => ({ ...prev, brands: 'available' }));
-                  return Array.isArray(data) ? data.length : 0;
-                }),
-                apiService.getCategories().then(data => {
-                  setApiStatus(prev => ({ ...prev, categories: 'available' }));
-                  return Array.isArray(data) ? data.length : 0;
-                })
-              ]);
+            const [productsRes, brandsRes, categoriesRes] = await Promise.allSettled([
+              apiService.getProducts(),
+              apiService.getBrands(),
+              apiService.getCategories()
+            ]);
 
-              setStats({
-                totalProducts: productsCount.status === 'fulfilled' ? productsCount.value : 0,
-                totalBrands: brandsCount.status === 'fulfilled' ? brandsCount.value : 0,
-                totalCategories: categoriesCount.status === 'fulfilled' ? categoriesCount.value : 0,
-                totalRevenue: 125000000 // Mock data
-              });
-
-              // Update API status based on results
-              if (productsCount.status === 'rejected') {
-                setApiStatus(prev => ({ ...prev, products: 'unavailable' }));
-              }
-              if (brandsCount.status === 'rejected') {
-                setApiStatus(prev => ({ ...prev, brands: 'unavailable' }));
-              }
-              if (categoriesCount.status === 'rejected') {
-                setApiStatus(prev => ({ ...prev, categories: 'unavailable' }));
-              }
-
-            } catch (error) {
-              console.error('Error loading dashboard stats:', error);
-              setStats({
-                totalProducts: 0,
-                totalBrands: 0,
-                totalCategories: 0,
-                totalRevenue: 0
-              });
-            }
+            setStats({
+              totalProducts: productsRes.status === 'fulfilled' ? productsRes.value.length : 0,
+              totalBrands: brandsRes.status === 'fulfilled' ? brandsRes.value.length : 0,
+              totalCategories: categoriesRes.status === 'fulfilled' ? categoriesRes.value.length : 0,
+              totalRevenue: 0 // Cần tính từ dữ liệu thực
+            });
             break;
         }
       } catch (error) {
         console.error('Error loading data:', error);
-        // FIXED: Không hiển thị notification error nữa, chỉ log
-        
-        // Reset data khi có lỗi
-        switch (activeMenu) {
-          case 'products':
-            setProducts([]);
-            break;
-          case 'brands':
-            setBrands([]);
-            break;
-          case 'categories':
-            setCategories([]);
-            break;
-        }
+        notificationManager.error('Có lỗi xảy ra khi tải dữ liệu: ' + error.message);
       } finally {
         setLoading(false);
       }
@@ -185,18 +94,46 @@ const AdminLayout = ({ onModeChange }) => {
     loadData();
   }, [activeMenu]);
 
-  // Rest of the component methods remain the same...
+  // Load brands và categories cho product form
+  useEffect(() => {
+    const loadFormData = async () => {
+      if (activeMenu === 'products' && showProductModal && (brands.length === 0 || categories.length === 0)) {
+        try {
+          const [brandsData, categoriesData] = await Promise.allSettled([
+            apiService.getBrands(),
+            apiService.getCategories()
+          ]);
+
+          if (brandsData.status === 'fulfilled') setBrands(brandsData.value);
+          if (categoriesData.status === 'fulfilled') setCategories(categoriesData.value);
+        } catch (error) {
+          console.error('Error loading form data:', error);
+        }
+      }
+    };
+
+    loadFormData();
+  }, [activeMenu, showProductModal]);
+
   const formatPrice = (price) => {
     return new Intl.NumberFormat('vi-VN', {
       style: 'currency',
       currency: 'VND'
-    }).format(price);
+    }).format(price || 0);
   };
 
   const getImageUrl = (filename) => {
     if (!filename) return 'https://via.placeholder.com/300x200?text=No+Image';
     return `http://localhost:9010/api/files/${filename}`;
   };
+
+  const getMenuItems = () => [
+    { id: 'dashboard', title: 'Trang chủ', icon: '🏠' },
+    { id: 'products', title: 'Quản lý sản phẩm', icon: '📦' },
+    { id: 'brands', title: 'Quản lý thương hiệu', icon: '🏷️' },
+    { id: 'categories', title: 'Quản lý danh mục', icon: '📂' },
+    { id: 'orders', title: 'Quản lý đơn hàng', icon: '🧾' }
+  ];
 
   // Product functions
   const openProductModal = (type, product = null) => {
@@ -207,7 +144,7 @@ const AdminLayout = ({ onModeChange }) => {
     } else if (type === 'add') {
       setEditingProduct({
         tenSP: '', moTa: '', giaTien: '', soLuongTrongKho: '',
-        maDanhMuc: '', maHang: '', anh1: ''
+        maDanhMuc: '', maHang: '', anh1: '', soLuongDaBan: 0
       });
     }
     setShowProductModal(true);
@@ -215,19 +152,25 @@ const AdminLayout = ({ onModeChange }) => {
 
   const handleSaveProduct = async () => {
     try {
+      if (!editingProduct.tenSP?.trim()) {
+        notificationManager.warning('Vui lòng nhập tên sản phẩm');
+        return;
+      }
+
       const productData = {
-        tenSP: editingProduct.tenSP,
+        tenSP: editingProduct.tenSP.trim(),
         moTa: editingProduct.moTa || '',
-        giaTien: parseInt(editingProduct.giaTien),
-        soLuongTrongKho: parseInt(editingProduct.soLuongTrongKho),
-        maDanhMuc: parseInt(editingProduct.maDanhMuc),
-        maHang: parseInt(editingProduct.maHang),
+        giaTien: parseInt(editingProduct.giaTien) || 0,
+        soLuongTrongKho: parseInt(editingProduct.soLuongTrongKho) || 0,
+        soLuongDaBan: parseInt(editingProduct.soLuongDaBan) || 0,
+        maDanhMuc: parseInt(editingProduct.maDanhMuc) || null,
+        maHang: parseInt(editingProduct.maHang) || null,
         anh1: editingProduct.anh1 || ''
       };
 
       if (productModalType === 'edit') {
         const updated = await apiService.updateProduct(editingProduct.maSP, productData);
-        setProducts(prev => prev.map(p => p.maSP === editingProduct.maSP ? updated : p));
+        setProducts(prev => prev.map(p => p.maSP === editingProduct.maSP ? { ...updated, maSP: editingProduct.maSP } : p));
         notificationManager.success('Cập nhật sản phẩm thành công');
       } else {
         const newProduct = await apiService.addProduct(productData);
@@ -236,6 +179,7 @@ const AdminLayout = ({ onModeChange }) => {
       }
       setShowProductModal(false);
     } catch (error) {
+      console.error('Save product error:', error);
       notificationManager.error('Có lỗi xảy ra: ' + error.message);
     }
   };
@@ -247,18 +191,14 @@ const AdminLayout = ({ onModeChange }) => {
         setProducts(prev => prev.filter(p => p.maSP !== product.maSP));
         notificationManager.success('Xóa sản phẩm thành công');
       } catch (error) {
+        console.error('Delete product error:', error);
         notificationManager.error('Có lỗi xảy ra: ' + error.message);
       }
     }
   };
 
-  // FIXED: Brand functions với API status check
+  // Brand functions
   const openBrandModal = (type, brand = null) => {
-    if (apiStatus.brands !== 'available') {
-      notificationManager.warning('API quản lý thương hiệu chưa được kích hoạt');
-      return;
-    }
-    
     if (type === 'edit' && brand) {
       setEditingBrand({ ...brand });
     } else if (type === 'add') {
@@ -268,13 +208,12 @@ const AdminLayout = ({ onModeChange }) => {
   };
 
   const handleSaveBrand = async () => {
-    if (!editingBrand.tenHang.trim()) {
+    if (!editingBrand.tenHang?.trim()) {
       notificationManager.warning('Vui lòng nhập tên thương hiệu');
       return;
     }
 
     try {
-      setLoading(true);
       if (editingBrand.maHang) {
         const updatedBrand = await apiService.updateBrand(editingBrand.maHang, editingBrand);
         setBrands(prev => prev.map(b => b.maHang === editingBrand.maHang ? updatedBrand : b));
@@ -289,36 +228,24 @@ const AdminLayout = ({ onModeChange }) => {
     } catch (error) {
       console.error('Brand save error:', error);
       notificationManager.error('Có lỗi xảy ra: ' + error.message);
-    } finally {
-      setLoading(false);
     }
   };
 
   const handleDeleteBrand = async (brand) => {
-    if (!window.confirm(`Xóa thương hiệu "${brand.tenHang}"?`)) {
-      return;
-    }
+    if (!window.confirm(`Xóa thương hiệu "${brand.tenHang}"?`)) return;
 
     try {
-      setLoading(true);
       await apiService.deleteBrand(brand.maHang);
       setBrands(prev => prev.filter(b => b.maHang !== brand.maHang));
       notificationManager.success('Xóa thương hiệu thành công');
     } catch (error) {
       console.error('Brand delete error:', error);
       notificationManager.error('Có lỗi xảy ra: ' + error.message);
-    } finally {
-      setLoading(false);
     }
   };
 
-  // FIXED: Category functions với API status check
+  // Category functions
   const openCategoryModal = (type, category = null) => {
-    if (apiStatus.categories !== 'available') {
-      notificationManager.warning('API quản lý danh mục chưa được kích hoạt');
-      return;
-    }
-
     if (type === 'edit' && category) {
       setEditingCategory({ ...category });
     } else if (type === 'add') {
@@ -328,13 +255,12 @@ const AdminLayout = ({ onModeChange }) => {
   };
 
   const handleSaveCategory = async () => {
-    if (!editingCategory.tenDanhMuc.trim()) {
+    if (!editingCategory.tenDanhMuc?.trim()) {
       notificationManager.warning('Vui lòng nhập tên danh mục');
       return;
     }
 
     try {
-      setLoading(true);
       if (editingCategory.maDanhMuc) {
         const updatedCategory = await apiService.updateCategory(editingCategory.maDanhMuc, editingCategory);
         setCategories(prev => prev.map(c => c.maDanhMuc === editingCategory.maDanhMuc ? updatedCategory : c));
@@ -349,26 +275,19 @@ const AdminLayout = ({ onModeChange }) => {
     } catch (error) {
       console.error('Category save error:', error);
       notificationManager.error('Có lỗi xảy ra: ' + error.message);
-    } finally {
-      setLoading(false);
     }
   };
 
   const handleDeleteCategory = async (category) => {
-    if (!window.confirm(`Xóa danh mục "${category.tenDanhMuc}"?`)) {
-      return;
-    }
+    if (!window.confirm(`Xóa danh mục "${category.tenDanhMuc}"?`)) return;
 
     try {
-      setLoading(true);
       await apiService.deleteCategory(category.maDanhMuc);
       setCategories(prev => prev.filter(c => c.maDanhMuc !== category.maDanhMuc));
       notificationManager.success('Xóa danh mục thành công');
     } catch (error) {
       console.error('Category delete error:', error);
       notificationManager.error('Có lỗi xảy ra: ' + error.message);
-    } finally {
-      setLoading(false);
     }
   };
 
@@ -383,52 +302,12 @@ const AdminLayout = ({ onModeChange }) => {
     c.tenDanhMuc && c.tenDanhMuc.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
-  // FIXED: Dashboard với API status indicators
+  // Dashboard
   const renderDashboard = () => (
     <div className="dashboard">
       <div className="dashboard-header">
         <h1>📊 Thống kê tổng quan</h1>
         <p>Tổng quan về hoạt động kinh doanh</p>
-      </div>
-
-      {/* FIXED: API Status indicators */}
-      <div className="api-status-section" style={{ 
-        marginBottom: '2rem', 
-        padding: '1rem', 
-        background: '#f8fafc', 
-        borderRadius: '12px',
-        border: '1px solid #e5e7eb'
-      }}>
-        <h3 style={{ marginBottom: '1rem', color: '#374151' }}>🔌 Trạng thái API</h3>
-        <div style={{ display: 'flex', gap: '1rem', flexWrap: 'wrap' }}>
-          <div style={{ 
-            padding: '0.5rem 1rem', 
-            borderRadius: '20px', 
-            background: apiStatus.products === 'available' ? '#dcfce7' : '#fef2f2',
-            color: apiStatus.products === 'available' ? '#16a34a' : '#dc2626',
-            border: `1px solid ${apiStatus.products === 'available' ? '#bbf7d0' : '#fecaca'}`
-          }}>
-            📦 Sản phẩm: {apiStatus.products === 'available' ? '✅ Hoạt động' : '❌ Không khả dụng'}
-          </div>
-          <div style={{ 
-            padding: '0.5rem 1rem', 
-            borderRadius: '20px', 
-            background: apiStatus.brands === 'available' ? '#dcfce7' : '#fef2f2',
-            color: apiStatus.brands === 'available' ? '#16a34a' : '#dc2626',
-            border: `1px solid ${apiStatus.brands === 'available' ? '#bbf7d0' : '#fecaca'}`
-          }}>
-            🏷️ Thương hiệu: {apiStatus.brands === 'available' ? '✅ Hoạt động' : '❌ Không khả dụng'}
-          </div>
-          <div style={{ 
-            padding: '0.5rem 1rem', 
-            borderRadius: '20px', 
-            background: apiStatus.categories === 'available' ? '#dcfce7' : '#fef2f2',
-            color: apiStatus.categories === 'available' ? '#16a34a' : '#dc2626',
-            border: `1px solid ${apiStatus.categories === 'available' ? '#bbf7d0' : '#fecaca'}`
-          }}>
-            📂 Danh mục: {apiStatus.categories === 'available' ? '✅ Hoạt động' : '❌ Không khả dụng'}
-          </div>
-        </div>
       </div>
 
       <div className="stats-grid">
@@ -460,7 +339,7 @@ const AdminLayout = ({ onModeChange }) => {
           <div className="stat-icon">💰</div>
           <div className="stat-content">
             <div className="stat-number">{formatPrice(stats.totalRevenue)}</div>
-            <div className="stat-label">Doanh thu tháng</div>
+            <div className="stat-label">Doanh thu</div>
           </div>
         </div>
       </div>
@@ -469,21 +348,17 @@ const AdminLayout = ({ onModeChange }) => {
         <button className="action-btn" onClick={() => setActiveMenu('products')}>
           ➕ Thêm sản phẩm
         </button>
-        {apiStatus.brands === 'available' && (
-          <button className="action-btn" onClick={() => setActiveMenu('brands')}>
-            🏷️ Thêm thương hiệu
-          </button>
-        )}
-        {apiStatus.categories === 'available' && (
-          <button className="action-btn" onClick={() => setActiveMenu('categories')}>
-            📂 Thêm danh mục
-          </button>
-        )}
+        <button className="action-btn" onClick={() => setActiveMenu('brands')}>
+          🏷️ Thêm thương hiệu
+        </button>
+        <button className="action-btn" onClick={() => setActiveMenu('categories')}>
+          📂 Thêm danh mục
+        </button>
       </div>
     </div>
   );
 
-  // Render Products (same as before)
+  // Render Products
   const renderProducts = () => (
     <div className="admin-section">
       <div className="section-header">
@@ -529,141 +404,113 @@ const AdminLayout = ({ onModeChange }) => {
     </div>
   );
 
-  // FIXED: Render Brands với API status check
-  const renderBrands = () => {
-    if (apiStatus.brands !== 'available') {
-      return (
-        <div className="admin-section">
-          <div className="api-unavailable">
-            <h2>🚫 API Thương hiệu không khả dụng</h2>
-            <p>Endpoint /api/v1/brands chưa được triển khai trên server.</p>
-            <p>Vui lòng liên hệ team backend để kích hoạt tính năng này.</p>
-          </div>
-        </div>
-      );
-    }
-
-    return (
-      <div className="admin-section">
-        <div className="section-header">
-          <h1>🏷️ Quản lý thương hiệu</h1>
-          <button className="btn-primary" onClick={() => openBrandModal('add')}>
-            ➕ Thêm thương hiệu
-          </button>
-        </div>
-
-        <div className="section-filters">
-          <input
-            type="text"
-            placeholder="Tìm kiếm thương hiệu..."
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-            className="search-input"
-          />
-        </div>
-
-        {filteredBrands.length === 0 ? (
-          <div className="no-data">
-            <p>Không có thương hiệu nào{searchTerm && ` phù hợp với "${searchTerm}"`}</p>
-          </div>
-        ) : (
-          <div className="data-table">
-            <table>
-              <thead>
-                <tr>
-                  <th>ID</th>
-                  <th>Tên thương hiệu</th>
-                  <th>Số sản phẩm</th>
-                  <th>Thao tác</th>
-                </tr>
-              </thead>
-              <tbody>
-                {filteredBrands.map(brand => (
-                  <tr key={brand.maHang}>
-                    <td>#{brand.maHang}</td>
-                    <td>{brand.tenHang}</td>
-                    <td>{products.filter(p => p.maHang === brand.maHang).length}</td>
-                    <td>
-                      <button onClick={() => openBrandModal('edit', brand)}>✏️</button>
-                      <button onClick={() => handleDeleteBrand(brand)}>🗑️</button>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
+  // Render Brands
+  const renderBrands = () => (
+    <div className="admin-section">
+      <div className="section-header">
+        <h1>🏷️ Quản lý thương hiệu</h1>
+        <button className="btn-primary" onClick={() => openBrandModal('add')}>
+          ➕ Thêm thương hiệu
+        </button>
       </div>
-    );
-  };
 
-  // FIXED: Render Categories với API status check
-  const renderCategories = () => {
-    if (apiStatus.categories !== 'available') {
-      return (
-        <div className="admin-section">
-          <div className="api-unavailable">
-            <h2>🚫 API Danh mục không khả dụng</h2>
-            <p>Endpoint /api/v1/categories chưa được triển khai trên server.</p>
-            <p>Vui lòng liên hệ team backend để kích hoạt tính năng này.</p>
-          </div>
-        </div>
-      );
-    }
-
-    return (
-      <div className="admin-section">
-        <div className="section-header">
-          <h1>📂 Quản lý danh mục</h1>
-          <button className="btn-primary" onClick={() => openCategoryModal('add')}>
-            ➕ Thêm danh mục
-          </button>
-        </div>
-
-        <div className="section-filters">
-          <input
-            type="text"
-            placeholder="Tìm kiếm danh mục..."
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-            className="search-input"
-          />
-        </div>
-
-        {filteredCategories.length === 0 ? (
-          <div className="no-data">
-            <p>Không có danh mục nào{searchTerm && ` phù hợp với "${searchTerm}"`}</p>
-          </div>
-        ) : (
-          <div className="data-table">
-            <table>
-              <thead>
-                <tr>
-                  <th>ID</th>
-                  <th>Tên danh mục</th>
-                  <th>Số sản phẩm</th>
-                  <th>Thao tác</th>
-                </tr>
-              </thead>
-              <tbody>
-                {filteredCategories.map(category => (
-                  <tr key={category.maDanhMuc}>
-                    <td>#{category.maDanhMuc}</td>
-                    <td>{category.tenDanhMuc}</td>
-                    <td>{products.filter(p => p.maDanhMuc === category.maDanhMuc).length}</td>
-                    <td>
-                      <button onClick={() => openCategoryModal('edit', category)}>✏️</button>
-                      <button onClick={() => handleDeleteCategory(category)}>🗑️</button>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
+      <div className="section-filters">
+        <input
+          type="text"
+          placeholder="Tìm kiếm thương hiệu..."
+          value={searchTerm}
+          onChange={(e) => setSearchTerm(e.target.value)}
+          className="search-input"
+        />
       </div>
-    );
-  };
+
+      {filteredBrands.length === 0 ? (
+        <div className="no-data">
+          <p>Không có thương hiệu nào{searchTerm && ` phù hợp với "${searchTerm}"`}</p>
+        </div>
+      ) : (
+        <div className="data-table">
+          <table>
+            <thead>
+              <tr>
+                <th>ID</th>
+                <th>Tên thương hiệu</th>
+                <th>Số sản phẩm</th>
+                <th>Thao tác</th>
+              </tr>
+            </thead>
+            <tbody>
+              {filteredBrands.map(brand => (
+                <tr key={brand.maHang}>
+                  <td>#{brand.maHang}</td>
+                  <td>{brand.tenHang}</td>
+                  <td>{products.filter(p => p.maHang === brand.maHang).length}</td>
+                  <td>
+                    <button onClick={() => openBrandModal('edit', brand)}>✏️</button>
+                    <button onClick={() => handleDeleteBrand(brand)}>🗑️</button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
+  );
+
+  // Render Categories
+  const renderCategories = () => (
+    <div className="admin-section">
+      <div className="section-header">
+        <h1>📂 Quản lý danh mục</h1>
+        <button className="btn-primary" onClick={() => openCategoryModal('add')}>
+          ➕ Thêm danh mục
+        </button>
+      </div>
+
+      <div className="section-filters">
+        <input
+          type="text"
+          placeholder="Tìm kiếm danh mục..."
+          value={searchTerm}
+          onChange={(e) => setSearchTerm(e.target.value)}
+          className="search-input"
+        />
+      </div>
+
+      {filteredCategories.length === 0 ? (
+        <div className="no-data">
+          <p>Không có danh mục nào{searchTerm && ` phù hợp với "${searchTerm}"`}</p>
+        </div>
+      ) : (
+        <div className="data-table">
+          <table>
+            <thead>
+              <tr>
+                <th>ID</th>
+                <th>Tên danh mục</th>
+                <th>Số sản phẩm</th>
+                <th>Thao tác</th>
+              </tr>
+            </thead>
+            <tbody>
+              {filteredCategories.map(category => (
+                <tr key={category.maDanhMuc}>
+                  <td>#{category.maDanhMuc}</td>
+                  <td>{category.tenDanhMuc}</td>
+                  <td>{products.filter(p => p.maDanhMuc === category.maDanhMuc).length}</td>
+                  <td>
+                    <button onClick={() => openCategoryModal('edit', category)}>✏️</button>
+                    <button onClick={() => handleDeleteCategory(category)}>🗑️</button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
+  );
 
   // Render Orders
   const renderOrders = () => {
@@ -711,8 +558,8 @@ const AdminLayout = ({ onModeChange }) => {
           </div>
           {!isSidebarCollapsed && (
             <div className="user-info">
-              <div className="user-name">Xin chào! hq@gmail.com</div>
-              <div className="user-role">Administrator</div>
+              <div className="user-name">Administrator</div>
+              <div className="user-role">Quản trị viên</div>
             </div>
           )}
         </div>
@@ -796,9 +643,15 @@ const AdminLayout = ({ onModeChange }) => {
                   />
                   <input
                     type="number"
-                    placeholder="Số lượng"
+                    placeholder="Số lượng trong kho"
                     value={editingProduct?.soLuongTrongKho || ''}
                     onChange={(e) => setEditingProduct(prev => ({...prev, soLuongTrongKho: e.target.value}))}
+                  />
+                  <input
+                    type="number"
+                    placeholder="Số lượng đã bán"
+                    value={editingProduct?.soLuongDaBan || ''}
+                    onChange={(e) => setEditingProduct(prev => ({...prev, soLuongDaBan: e.target.value}))}
                   />
                   <select
                     value={editingProduct?.maDanhMuc || ''}
@@ -822,6 +675,12 @@ const AdminLayout = ({ onModeChange }) => {
                       </option>
                     ))}
                   </select>
+                  <input
+                    type="text"
+                    placeholder="URL Ảnh 1"
+                    value={editingProduct?.anh1 || ''}
+                    onChange={(e) => setEditingProduct(prev => ({...prev, anh1: e.target.value}))}
+                  />
                   <textarea
                     placeholder="Mô tả"
                     value={editingProduct?.moTa || ''}
@@ -840,6 +699,7 @@ const AdminLayout = ({ onModeChange }) => {
                   <h3>{selectedProduct?.tenSP}</h3>
                   <p>Giá: {formatPrice(selectedProduct?.giaTien)}</p>
                   <p>Kho: {selectedProduct?.soLuongTrongKho}</p>
+                  <p>Đã bán: {selectedProduct?.soLuongDaBan}</p>
                   <p>Mô tả: {selectedProduct?.moTa}</p>
                 </div>
               )}
@@ -899,8 +759,6 @@ const AdminLayout = ({ onModeChange }) => {
           </div>
         </div>
       )}
-
-
     </div>
   );
 };

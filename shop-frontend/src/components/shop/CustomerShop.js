@@ -1,4 +1,4 @@
-// FIXED CustomerShop.js - Xử lý đúng khi không có dữ liệu từ API
+// FIXED CustomerShop.js - Sử dụng dữ liệu thực từ API, không dùng fallback data
 import React, { useState, useEffect } from 'react';
 import apiService from '../../services/api/apiService';
 import authService from '../../services/api/authService';
@@ -8,9 +8,12 @@ import './CustomerShop.css';
 
 const CustomerShop = ({ onModeChange, onLoginSuccess, authState }) => {
   const [products, setProducts] = useState([]);
+  const [categories, setCategories] = useState([]);
+  const [brands, setBrands] = useState([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('');
+  const [selectedBrand, setSelectedBrand] = useState('');
   const [sortBy, setSortBy] = useState('newest');
   const [cart, setCart] = useState([]);
   const [favorites, setFavorites] = useState([]);
@@ -19,22 +22,10 @@ const CustomerShop = ({ onModeChange, onLoginSuccess, authState }) => {
   const [showProductDetail, setShowProductDetail] = useState(false);
   const [showCheckout, setShowCheckout] = useState(false);
   const [currentImageIndex, setCurrentImageIndex] = useState(0);
-  const [hasApiError, setHasApiError] = useState(false); // FIXED: Track API errors
+  const [hasApiError, setHasApiError] = useState(false);
   
-  // FIXED: Use auth state from App instead of local state
   const isAuthenticated = authState?.isAuthenticated || false;
   const user = authState?.user || null;
-
-  const categories = [
-    { id: '', name: 'Tất cả' },
-    { id: 1, name: 'Máy giặt' },
-    { id: 2, name: 'Điều hòa' },
-    { id: 3, name: 'Tủ lạnh' },
-    { id: 6, name: 'Nồi cơm' },
-    { id: 7, name: 'Ti vi' },
-    { id: 8, name: 'Quạt điện' },
-    { id: 9, name: 'Máy lọc nước' }
-  ];
 
   const sortOptions = [
     { value: 'newest', label: 'Mới nhất' },
@@ -43,84 +34,117 @@ const CustomerShop = ({ onModeChange, onLoginSuccess, authState }) => {
     { value: 'best-selling', label: 'Bán chạy' }
   ];
 
-  // FIXED: Load products without demo data
+  // Load all data từ API
   useEffect(() => {
-    const fetchProducts = async () => {
+    const fetchAllData = async () => {
       setLoading(true);
       setHasApiError(false);
       
       try {
-        const res = await apiService.getProducts();
-        
-        if (!Array.isArray(res)) {
-          console.warn('Invalid products data format');
+        // Load products, categories và brands từ API
+        const [productsRes, categoriesRes, brandsRes] = await Promise.allSettled([
+          apiService.getProducts(),
+          apiService.getCategories(),
+          apiService.getBrands()
+        ]);
+
+        // Handle products
+        if (productsRes.status === 'fulfilled' && Array.isArray(productsRes.value)) {
+          const validProducts = productsRes.value.filter(p => {
+            return p && 
+                   p.maSP && 
+                   p.tenSP && 
+                   typeof p.giaTien === 'number' && 
+                   typeof p.soLuongTrongKho === 'number' &&
+                   p.giaTien > 0;
+          });
+          setProducts(validProducts);
+          console.log(`✅ Loaded ${validProducts.length} products`);
+        } else {
+          console.error('Failed to load products:', productsRes.reason);
           setProducts([]);
           setHasApiError(true);
-          return;
         }
 
-        // FIXED: Validate and filter products properly
-        const validProducts = res.filter(p => {
-          return p && 
-                 p.maSP && 
-                 p.tenSP && 
-                 typeof p.giaTien === 'number' && 
-                 typeof p.soLuongTrongKho === 'number' &&
-                 p.giaTien > 0;
-        });
-
-        setProducts(validProducts);
-
-        if (validProducts.length === 0) {
-          if (res.length > 0) {
-            console.warn('Some products were filtered out due to invalid data');
-            notificationManager.warning('Một số sản phẩm có dữ liệu không hợp lệ');
-          }
-          setHasApiError(true);
+        // Handle categories
+        if (categoriesRes.status === 'fulfilled' && Array.isArray(categoriesRes.value)) {
+          const validCategories = [
+            { id: '', name: 'Tất cả' },
+            ...categoriesRes.value.map(cat => ({
+              id: cat.maDanhMuc,
+              name: cat.tenDanhMuc
+            }))
+          ];
+          setCategories(validCategories);
+          console.log(`✅ Loaded ${categoriesRes.value.length} categories`);
         } else {
-          notificationManager.success(`Đã tải ${validProducts.length} sản phẩm`);
+          console.error('Failed to load categories:', categoriesRes.reason);
+          setCategories([{ id: '', name: 'Tất cả' }]);
+        }
+
+        // Handle brands
+        if (brandsRes.status === 'fulfilled' && Array.isArray(brandsRes.value)) {
+          const validBrands = [
+            { id: '', name: 'Tất cả thương hiệu' },
+            ...brandsRes.value.map(brand => ({
+              id: brand.maHang,
+              name: brand.tenHang
+            }))
+          ];
+          setBrands(validBrands);
+          console.log(`✅ Loaded ${brandsRes.value.length} brands`);
+        } else {
+          console.error('Failed to load brands:', brandsRes.reason);
+          setBrands([{ id: '', name: 'Tất cả thương hiệu' }]);
+        }
+
+        // Check if we have any data
+        const hasProducts = productsRes.status === 'fulfilled' && Array.isArray(productsRes.value) && productsRes.value.length > 0;
+        
+        if (!hasProducts) {
+          setHasApiError(true);
+          notificationManager.error('Không thể tải dữ liệu sản phẩm từ server');
+        } else {
+          const successCount = [
+            productsRes.status === 'fulfilled' ? productsRes.value.length : 0,
+            categoriesRes.status === 'fulfilled' ? categoriesRes.value.length : 0,
+            brandsRes.status === 'fulfilled' ? brandsRes.value.length : 0
+          ];
+          notificationManager.success(`Đã tải ${successCount[0]} sản phẩm, ${successCount[1]} danh mục, ${successCount[2]} thương hiệu`);
         }
 
       } catch (err) {
-        console.error('Error loading products:', err);
+        console.error('Error loading data:', err);
         setProducts([]);
+        setCategories([{ id: '', name: 'Tất cả' }]);
+        setBrands([{ id: '', name: 'Tất cả thương hiệu' }]);
         setHasApiError(true);
-        notificationManager.error('Không thể kết nối tới server sản phẩm');
+        notificationManager.error('Không thể kết nối tới server: ' + err.message);
       } finally {
         setLoading(false);
       }
     };
 
-    fetchProducts();
+    fetchAllData();
   }, []);
 
-  // Load cart from localStorage
+  // Load cart từ localStorage
   useEffect(() => {
     try {
       const savedCart = localStorage.getItem('cart');
       const savedFavorites = localStorage.getItem('favorites');
       
       if (savedCart) {
-        try {
-          const parsedCart = JSON.parse(savedCart);
-          if (Array.isArray(parsedCart)) {
-            setCart(parsedCart);
-          }
-        } catch (error) {
-          localStorage.removeItem('cart');
-          setCart([]);
+        const parsedCart = JSON.parse(savedCart);
+        if (Array.isArray(parsedCart)) {
+          setCart(parsedCart);
         }
       }
       
       if (savedFavorites) {
-        try {
-          const parsedFavorites = JSON.parse(savedFavorites);
-          if (Array.isArray(parsedFavorites)) {
-            setFavorites(parsedFavorites);
-          }
-        } catch (error) {
-          localStorage.removeItem('favorites');
-          setFavorites([]);
+        const parsedFavorites = JSON.parse(savedFavorites);
+        if (Array.isArray(parsedFavorites)) {
+          setFavorites(parsedFavorites);
         }
       }
     } catch (error) {
@@ -160,59 +184,44 @@ const CustomerShop = ({ onModeChange, onLoginSuccess, authState }) => {
 
   const getImageUrl = (filename) => {
     if (!filename) return 'https://via.placeholder.com/300x200?text=No+Image';
-    try {
-      return `http://localhost:9010/api/files/${filename}`;
-    } catch (error) {
-      return 'https://via.placeholder.com/300x200?text=No+Image';
-    }
+    return `http://localhost:9010/api/files/${filename}`;
   };
 
   const getProductImages = (product) => {
     if (!product) return [];
-    try {
-      return [product.anh1, product.anh2, product.anh3, product.anh4, product.anh5, product.anh6]
-        .filter(img => img && img.trim() !== '');
-    } catch (error) {
-      return [product.anh1].filter(img => img);
-    }
+    return [product.anh1, product.anh2, product.anh3, product.anh4, product.anh5, product.anh6]
+      .filter(img => img && img.trim() !== '');
   };
 
-  // Filter and sort products
+  // Filter và sort products
   const filteredAndSortedProducts = products
     .filter(product => {
-      try {
-        if (!product || !product.tenSP) return false;
-        
-        const matchesSearch = 
-          (product.tenSP?.toLowerCase().includes(searchTerm.toLowerCase()) || false) ||
-          (product.moTa?.toLowerCase().includes(searchTerm.toLowerCase()) || false);    
-        
-        const matchesCategory = selectedCategory === '' || 
-          product.maDanhMuc === parseInt(selectedCategory);
-        
-        const inStock = (product.soLuongTrongKho || 0) > 0;
-        
-        return matchesSearch && matchesCategory && inStock;
-      } catch (error) {
-        console.error('Error filtering product:', product, error);
-        return false;
-      }
+      if (!product || !product.tenSP) return false;
+      
+      const matchesSearch = 
+        product.tenSP.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        (product.moTa && product.moTa.toLowerCase().includes(searchTerm.toLowerCase()));    
+      
+      const matchesCategory = selectedCategory === '' || 
+        product.maDanhMuc === parseInt(selectedCategory);
+      
+      const matchesBrand = selectedBrand === '' || 
+        product.maHang === parseInt(selectedBrand);
+      
+      const inStock = (product.soLuongTrongKho || 0) > 0;
+      
+      return matchesSearch && matchesCategory && matchesBrand && inStock;
     })
     .sort((a, b) => {
-      try {
-        switch (sortBy) {
-          case 'price-low':
-            return (a.giaTien || 0) - (b.giaTien || 0);
-          case 'price-high':
-            return (b.giaTien || 0) - (a.giaTien || 0);
-          case 'best-selling':
-            return (b.soLuongDaBan || 0) - (a.soLuongDaBan || 0);
-          default:
-            return (b.maSP || 0) - (a.maSP || 0);
-        }
-      } catch (error) {
-        console.error('Error sorting products:', error);
-        return 0;
+      switch (sortBy) {
+        case 'price-low':
+          return (a.giaTien || 0) - (b.giaTien || 0);
+        case 'price-high':
+          return (b.giaTien || 0) - (a.giaTien || 0);
+        case 'best-selling':
+          return (b.soLuongDaBan || 0) - (a.soLuongDaBan || 0);
+        default:
+          return (b.maSP || 0) - (a.maSP || 0);
       }
     });
 
@@ -339,7 +348,7 @@ const CustomerShop = ({ onModeChange, onLoginSuccess, authState }) => {
     setSelectedProduct(null);
   };
 
-  // FIXED: Checkout functions with auth state
+  // Checkout functions
   const handleStartCheckout = () => {
     try {
       if (cart.length === 0) {
@@ -373,27 +382,33 @@ const CustomerShop = ({ onModeChange, onLoginSuccess, authState }) => {
     }
   };
 
-  // FIXED: Loading state
+  // Loading state
   if (loading) {
     return (
       <div className="customer-shop">
         <div className="loading-container">
           <div className="loading-spinner"></div>
-          <p>Đang tải sản phẩm từ server...</p>
+          <p>Đang tải dữ liệu từ server...</p>
         </div>
       </div>
     );
   }
 
-  // FIXED: Show appropriate message when no data available
+  // Error state khi không có data
   if (hasApiError && products.length === 0) {
     return (
       <div className="customer-shop">
         <div className="shop-content">
-          <div className="no-products-available">
-            <h3>Cửa hàng hiện đang bảo trì</h3>
-            <p>Hệ thống sản phẩm đang được cập nhật.</p>
-            <p>Vui lòng quay lại sau!</p>
+          <div className="api-error-container">
+            <div className="error-icon">⚠️</div>
+            <h3>Không thể tải dữ liệu</h3>
+            <p>Server không phản hồi hoặc có lỗi kết nối.</p>
+            <p>Vui lòng kiểm tra:</p>
+            <ul>
+              <li>Server backend đang chạy tại http://localhost:8000</li>
+              <li>Kết nối mạng ổn định</li>
+              <li>API endpoints đã được triển khai</li>
+            </ul>
             <button 
               className="retry-btn"
               onClick={() => window.location.reload()}
@@ -408,7 +423,7 @@ const CustomerShop = ({ onModeChange, onLoginSuccess, authState }) => {
 
   return (
     <div className="customer-shop">
-      {/* Filters */}
+      {/* Filters với dữ liệu thực từ API */}
       <div className="shop-filters compact">
         <div className="filters-content">
           <div className="header-search">
@@ -427,6 +442,15 @@ const CustomerShop = ({ onModeChange, onLoginSuccess, authState }) => {
           >
             {categories.map(cat => (
               <option key={cat.id} value={cat.id}>{cat.name}</option>
+            ))}
+          </select>
+
+          <select 
+            value={selectedBrand} 
+            onChange={(e) => setSelectedBrand(e.target.value)}
+          >
+            {brands.map(brand => (
+              <option key={brand.id} value={brand.id}>{brand.name}</option>
             ))}
           </select>
 
@@ -580,6 +604,12 @@ const CustomerShop = ({ onModeChange, onLoginSuccess, authState }) => {
                   <div className="meta-item">
                     <span>Đã bán:</span>
                     <strong>{selectedProduct.soLuongDaBan || 0}</strong>
+                  </div>
+                  <div className="meta-item">
+                    <span>Còn lại:</span>
+                    <strong className={selectedProduct.soLuongTrongKho > 0 ? 'in-stock' : 'out-stock'}>
+                      {selectedProduct.soLuongTrongKho || 0}
+                    </strong>
                   </div>
                 </div>
 

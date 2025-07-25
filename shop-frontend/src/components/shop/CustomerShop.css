@@ -917,3 +917,64 @@
     font-size: 0.7rem;
   }
 }
+/* Thêm vào CustomerShop.css */
+
+.api-error-container {
+  text-align: center;
+  padding: 4rem 2rem;
+  max-width: 600px;
+  margin: 2rem auto;
+  background: #fef2f2;
+  border-radius: 16px;
+  border: 2px solid #fecaca;
+  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.05);
+}
+
+.api-error-container .error-icon {
+  font-size: 4rem;
+  margin-bottom: 1rem;
+  color: #dc2626;
+}
+
+.api-error-container h3 {
+  font-size: 1.5rem;
+  font-weight: 700;
+  color: #dc2626;
+  margin-bottom: 1rem;
+}
+
+.api-error-container p {
+  color: #7f1d1d;
+  margin-bottom: 1rem;
+  line-height: 1.6;
+}
+
+.api-error-container ul {
+  text-align: left;
+  max-width: 400px;
+  margin: 1rem auto;
+  padding-left: 1rem;
+}
+
+.api-error-container li {
+  color: #7f1d1d;
+  margin-bottom: 0.5rem;
+  list-style-type: disc;
+}
+
+.retry-btn {
+  background: linear-gradient(135deg, #dc2626, #991b1b);
+  color: white;
+  border: none;
+  padding: 0.75rem 1.5rem;
+  border-radius: 8px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  margin-top: 1rem;
+}
+
+.retry-btn:hover {
+  background: linear-gradient(135deg, #991b1b, #7f1d1d);
+  transform: translateY(-2px);
+}
