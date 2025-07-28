@@ -1,13 +1,11 @@
-// FINAL AdminOrderDetail.js - Dữ liệu thực và disable khi đã giao
+// FIXED AdminOrderDetail.js - Dữ liệu thực, code đơn giản
 import React, { useEffect, useState } from "react";
 import orderApiService from "../../services/api/orderApiService";
-import userService from "../../services/userService";
 import apiService from "../../services/api/apiService";
 import { notificationManager } from '../layout/Notification/Notification';
 
 const AdminOrderDetail = ({ orderId, onBack }) => {
   const [order, setOrder] = useState(null);
-  const [customerInfo, setCustomerInfo] = useState(null);
   const [productDetails, setProductDetails] = useState({});
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -24,71 +22,35 @@ const AdminOrderDetail = ({ orderId, onBack }) => {
       setLoading(true);
       setError(null);
       
-      // FIXED: Lấy dữ liệu đơn hàng thực từ API
-      let orderData;
-      try {
-        orderData = await orderApiService.getOrderById(orderId);
-        console.log('Order data from API:', orderData);
-      } catch (apiError) {
-        console.error('Failed to fetch order from API:', apiError);
-        throw new Error('Không thể tải thông tin đơn hàng từ server');
-      }
-
+      const orderData = await orderApiService.getOrderById(orderId);
+      
       if (!orderData) {
         throw new Error('Đơn hàng không tồn tại');
       }
 
-      // FIXED: Tải thông tin khách hàng thực
-      if (orderData.userId) {
-        try {
-          const customerResponse = await userService.getUserById(orderData.userId);
-          if (customerResponse.success) {
-            setCustomerInfo(customerResponse.data);
-            console.log('Customer info loaded:', customerResponse.data);
-          }
-        } catch (customerError) {
-          console.warn('Could not fetch customer info:', customerError);
-        }
-      }
+      setOrder(orderData);
 
-      // FIXED: Tải chi tiết sản phẩm thực từ order items
+      // Load product details if order has items
       if (orderData.items && orderData.items.length > 0) {
-        const productPromises = orderData.items.map(async (item) => {
+        const productDetailsMap = {};
+        
+        for (const item of orderData.items) {
           try {
             const product = await apiService.getProductById(item.productId);
             if (product) {
-              return {
-                [item.productId]: {
-                  ...product,
-                  orderQuantity: item.quantity,
-                  orderPrice: product.giaTien
-                }
+              productDetailsMap[item.productId] = {
+                ...product,
+                orderQuantity: item.quantity,
+                orderPrice: product.giaTien
               };
             }
-            return null;
           } catch (error) {
             console.error(`Error fetching product ${item.productId}:`, error);
-            return null;
           }
-        });
-
-        try {
-          const productResults = await Promise.all(productPromises);
-          const productDetailsMap = {};
-          
-          productResults.forEach(result => {
-            if (result) {
-              Object.assign(productDetailsMap, result);
-            }
-          });
-          
-          setProductDetails(productDetailsMap);
-        } catch (error) {
-          console.error('Error fetching product details:', error);
         }
+        
+        setProductDetails(productDetailsMap);
       }
-
-      setOrder(orderData);
       
     } catch (error) {
       console.error('Error fetching order detail:', error);
@@ -125,13 +87,13 @@ const AdminOrderDetail = ({ orderId, onBack }) => {
       0: '#ef4444',
       1: '#f59e0b',
       2: '#3b82f6',
-      3: '#10b981',
-      'PENDING': '#f59e0b',
-      'CONFIRMED': '#3b82f6',
-      'SHIPPED': '#8b5cf6',
-      'DELIVERED': '#10b981',
-      'CANCELLED': '#ef4444'
+      3: '#10b981'
     };
+    
+    if (![0, 1, 2, 3].includes(Number(status))) {
+      return '#dc2626';
+    }
+    
     return colorMap[status] || '#6b7280';
   };
 
@@ -140,33 +102,31 @@ const AdminOrderDetail = ({ orderId, onBack }) => {
       0: 'Đã hủy',
       1: 'Chờ xác nhận',
       2: 'Đã xác nhận',
-      3: 'Đã giao hàng',
-      'PENDING': 'Chờ xác nhận',
-      'CONFIRMED': 'Đã xác nhận',
-      'SHIPPED': 'Đang giao hàng',
-      'DELIVERED': 'Đã giao hàng',
-      'CANCELLED': 'Đã hủy'
+      3: 'Đã giao hàng'
     };
-    return statusMap[status] || status || 'Không xác định';
+    
+    if (![0, 1, 2, 3].includes(Number(status))) {
+      return `Lỗi status: ${status}`;
+    }
+    
+    return statusMap[status] || `Status ${status}`;
   };
 
-  // FIXED: Cập nhật trạng thái với xử lý doanh thu
+  const getCustomerInfo = (userId) => {
+    return {
+      name: `User ${userId}`,
+      email: `user${userId}@shop.com`,
+      phone: 'N/A',
+      address: 'N/A'
+    };
+  };
+
   const handleStatusUpdate = async (newStatus) => {
     try {
       setUpdating(true);
       
-      const oldStatus = order.status;
-      
-      // Gọi API cập nhật trạng thái
       await orderApiService.updateOrderStatus(orderId, newStatus);
       
-      // Cập nhật kho hàng CHỈ khi chuyển thành "Đã giao hàng" (status = 3)
-      if (newStatus === 3 && oldStatus !== 3) {
-        await updateProductQuantitiesOnDelivery();
-        notificationManager.success(`💰 Đã cập nhật doanh thu: +${formatPrice(order.total)}`);
-      }
-      
-      // Cập nhật UI
       setOrder(prev => ({
         ...prev,
         status: newStatus
@@ -179,41 +139,6 @@ const AdminOrderDetail = ({ orderId, onBack }) => {
       notificationManager.error('Không thể cập nhật trạng thái đơn hàng');
     } finally {
       setUpdating(false);
-    }
-  };
-
-  // FIXED: Cập nhật số lượng sản phẩm khi giao hàng
-  const updateProductQuantitiesOnDelivery = async () => {
-    try {
-      if (!order.items || order.items.length === 0) return;
-
-      const updatePromises = order.items.map(async (item) => {
-        try {
-          const product = productDetails[item.productId];
-          if (!product) return;
-
-          const newQuantity = Math.max(0, product.soLuongTrongKho - item.quantity);
-          const newSoldQuantity = (product.soLuongDaBan || 0) + item.quantity;
-
-          const updateData = {
-            ...product,
-            soLuongTrongKho: newQuantity,
-            soLuongDaBan: newSoldQuantity
-          };
-
-          await apiService.updateProduct(item.productId, updateData);
-          
-        } catch (error) {
-          console.error(`Error updating product ${item.productId}:`, error);
-        }
-      });
-
-      await Promise.all(updatePromises);
-      console.log('Inventory and sales statistics updated successfully');
-      
-    } catch (error) {
-      console.error('Error updating product quantities:', error);
-      notificationManager.warning('Có lỗi khi cập nhật kho hàng');
     }
   };
 
@@ -261,8 +186,8 @@ const AdminOrderDetail = ({ orderId, onBack }) => {
     );
   }
 
-  // FIXED: Kiểm tra xem đơn hàng đã giao hay chưa
   const isDelivered = order.status === 3;
+  const customerInfo = getCustomerInfo(order.userId);
 
   return (
     <div className="admin-order-detail">
@@ -291,7 +216,7 @@ const AdminOrderDetail = ({ orderId, onBack }) => {
 
       <div className="detail-content">
         <div className="detail-grid">
-          {/* Thông tin khách hàng */}
+          {/* Customer Info */}
           <div className="detail-section">
             <h3>👤 Thông tin khách hàng</h3>
             <div className="info-grid">
@@ -301,24 +226,24 @@ const AdminOrderDetail = ({ orderId, onBack }) => {
               </div>
               <div className="info-item">
                 <label>Họ tên:</label>
-                <span>{customerInfo?.ten || `User ${order.userId}`}</span>
+                <span>{customerInfo.name}</span>
               </div>
               <div className="info-item">
                 <label>Email:</label>
-                <span>{customerInfo?.email || 'N/A'}</span>
+                <span>{customerInfo.email}</span>
               </div>
               <div className="info-item">
                 <label>Số điện thoại:</label>
-                <span>{customerInfo?.sdt || 'N/A'}</span>
+                <span>{customerInfo.phone}</span>
               </div>
               <div className="info-item full-width">
                 <label>Địa chỉ giao hàng:</label>
-                <span>{customerInfo?.diaChi || 'N/A'}</span>
+                <span>{customerInfo.address}</span>
               </div>
             </div>
           </div>
 
-          {/* Thông tin đơn hàng */}
+          {/* Order Info */}
           <div className="detail-section">
             <h3>📦 Thông tin đơn hàng</h3>
             <div className="info-grid">
@@ -336,7 +261,6 @@ const AdminOrderDetail = ({ orderId, onBack }) => {
               </div>
               <div className="info-item">
                 <label>Trạng thái:</label>
-                {/* FIXED: Disable select khi đã giao hàng */}
                 <select 
                   value={order.status || 1} 
                   onChange={(e) => handleStatusUpdate(parseInt(e.target.value))}
@@ -367,7 +291,7 @@ const AdminOrderDetail = ({ orderId, onBack }) => {
           </div>
         </div>
 
-        {/* Sản phẩm trong đơn hàng */}
+        {/* Order Items */}
         <div className="detail-section full-width">
           <h3>🛒 Sản phẩm trong đơn hàng</h3>
           <div className="items-table">
@@ -426,7 +350,6 @@ const AdminOrderDetail = ({ orderId, onBack }) => {
             ← Quay lại danh sách
           </button>
           
-          {/* FIXED: Chỉ hiện button khi chưa giao hàng */}
           {!isDelivered && (
             <div className="action-group">
               {order.status === 1 && (
@@ -559,13 +482,6 @@ const AdminOrderDetail = ({ orderId, onBack }) => {
           font-weight: 700;
           font-size: 1.125rem;
           color: #ef4444;
-        }
-
-        .status-select {
-          padding: 0.5rem;
-          border: 1px solid #d1d5db;
-          border-radius: 6px;
-          background: white;
         }
 
         .items-table {

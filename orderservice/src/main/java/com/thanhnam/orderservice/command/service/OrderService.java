@@ -1,4 +1,4 @@
-// FINAL OrderService.java - Cập nhật trạng thái và doanh thu
+// FIXED OrderService.java - Xóa bỏ demo users, chỉ dùng dữ liệu thực từ account service
 package com.thanhnam.orderservice.command.service;
 
 import com.thanhnam.orderservice.command.data.Order;
@@ -37,12 +37,9 @@ public class OrderService {
                 throw new IllegalArgumentException("User ID is required");
             }
 
-            if (!userExists(request.getUserId().longValue())) {
-                if (isValidDemoUser(request.getUserId())) {
-                    log.warn("Using demo user ID: {} for order processing", request.getUserId());
-                } else {
-                    throw new IllegalArgumentException("User ID " + request.getUserId() + " does not exist");
-                }
+            // FIXED: Chỉ kiểm tra user thực, không dùng demo users
+            if (!userExistsInDatabase(request.getUserId().longValue())) {
+                throw new IllegalArgumentException("User ID " + request.getUserId() + " does not exist in system");
             }
 
             if (request.getItems() == null || request.getItems().isEmpty()) {
@@ -99,11 +96,9 @@ public class OrderService {
                 return;
             }
 
-            // Cập nhật trạng thái
             order.setStatus(status);
             orderRepository.save(order);
 
-            // CHỈ tính doanh thu khi chuyển thành "Đã giao hàng" (status = 3)
             if (status == 3 && (oldStatus == null || oldStatus != 3)) {
                 updateRevenue(order);
                 log.info("Revenue updated for delivered order: {}", orderId);
@@ -117,15 +112,12 @@ public class OrderService {
         }
     }
 
-    // FIXED: Cập nhật doanh thu khi đơn hàng được giao
     private void updateRevenue(Order order) {
         try {
             log.info("Updating revenue for delivered order: {}", order.getOrderId());
 
-            // Lấy ngày hiện tại để cập nhật doanh thu
             LocalDate deliveryDate = LocalDate.now();
 
-            // FIXED: Cập nhật vào bảng doanh thu hoặc tạo bản ghi thống kê
             String updateRevenueSql = """
                 INSERT INTO DOANHTHU (Ngay, TongDoanhThu, SoDonHang, NguoiCapNhat) 
                 VALUES (?, ?, 1, 'SYSTEM')
@@ -145,7 +137,6 @@ public class OrderService {
                         order.getOrderId(), order.getTotal());
             }
 
-            // FIXED: Cập nhật thống kê tổng doanh thu trong bảng cấu hình hệ thống
             String updateTotalRevenueSql = """
                 INSERT INTO THONGKE (LoaiThongKe, GiaTri, NgayCapNhat) 
                 VALUES ('TOTAL_REVENUE', ?, NOW())
@@ -160,11 +151,9 @@ public class OrderService {
 
         } catch (Exception e) {
             log.error("Error updating revenue for order {}: {}", order.getOrderId(), e.getMessage());
-            // Không throw exception để không ảnh hưởng đến việc cập nhật trạng thái đơn hàng
         }
     }
 
-    // FIXED: Lấy thống kê doanh thu
     public Long getTotalRevenue() {
         try {
             String sql = "SELECT COALESCE(SUM(GiaTri), 0) FROM THONGKE WHERE LoaiThongKe = 'TOTAL_REVENUE'";
@@ -175,7 +164,6 @@ public class OrderService {
         }
     }
 
-    // FIXED: Lấy doanh thu theo ngày
     public Long getRevenueByDate(LocalDate date) {
         try {
             String sql = "SELECT COALESCE(TongDoanhThu, 0) FROM DOANHTHU WHERE Ngay = ?";
@@ -186,7 +174,6 @@ public class OrderService {
         }
     }
 
-    // FIXED: Lấy số đơn hàng đã giao theo trạng thái
     public Integer getOrderCountByStatus(Integer status) {
         try {
             return Math.toIntExact(orderRepository.countByStatus(status));
@@ -209,14 +196,12 @@ public class OrderService {
                 throw new IllegalArgumentException("Order with ID " + orderId + " does not exist");
             }
 
-            // Xoá chi tiết đơn hàng
             List<OrderDetail> orderDetails = orderDetailRepository.findByOrderId(orderId);
             if (!orderDetails.isEmpty()) {
                 orderDetailRepository.deleteAll(orderDetails);
                 log.info("Deleted {} order details for order {}", orderDetails.size(), orderId);
             }
 
-            // Xoá đơn hàng
             orderRepository.deleteById(orderId);
             log.info("Order {} cancelled successfully", orderId);
 
@@ -226,59 +211,31 @@ public class OrderService {
         }
     }
 
-    private boolean userExists(Long userId) {
+    // FIXED: Chỉ kiểm tra user thực từ account service, bỏ hết demo users
+    private boolean userExistsInDatabase(Long userId) {
         try {
-            log.info("Checking if user exists with ID: {}", userId);
-
-            if (isValidDemoUser(userId.intValue())) {
-                log.info("Demo user ID {} is valid", userId);
-                return true;
-            }
+            log.info("Checking if user exists in database with ID: {}", userId);
 
             ApiResponse<Boolean> response = accountServiceClient.checkUserExists(userId);
 
             if (response == null) {
-                log.warn("Received null response from account-service for user ID: {}", userId);
-                return handleUserValidationFallback(userId);
+                log.error("Null response from account-service for user ID: {}", userId);
+                return false;
             }
 
             Boolean exists = response.getResult();
             if (exists == null) {
-                log.warn("Received null result from account-service for user ID: {}", userId);
-                return handleUserValidationFallback(userId);
+                log.error("Null result from account-service for user ID: {}", userId);
+                return false;
             }
 
             log.info("User existence check for ID {}: {}", userId, exists);
             return exists;
 
         } catch (Exception e) {
-            log.error("Unexpected error when checking user ID {}: {}", userId, e.getMessage(), e);
-            return handleUserValidationFallback(userId);
-        }
-    }
-
-    private boolean isValidDemoUser(Integer userId) {
-        return userId != null && (
-                userId.equals(23) ||
-                        userId.equals(999) ||
-                        userId.equals(1) ||
-                        userId.equals(2)
-        );
-    }
-
-    private boolean handleUserValidationFallback(Long userId) {
-        try {
-            if (isValidDemoUser(userId.intValue())) {
-                log.info("Allowing demo user ID: {}", userId);
-                return true;
-            }
-
-            log.warn("Account service unavailable, allowing order for user ID: {} (demo mode)", userId);
-            return true;
-
-        } catch (Exception fallbackError) {
-            log.error("Error in user validation fallback for ID {}: {}", userId, fallbackError.getMessage());
-            return true;
+            log.error("Error checking user ID {}: {}", userId, e.getMessage(), e);
+            // KHÔNG fallback về demo users, trả về false nếu lỗi
+            return false;
         }
     }
 }
