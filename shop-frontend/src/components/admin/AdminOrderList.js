@@ -1,4 +1,4 @@
-// FIXED AdminOrderList.js - Dữ liệu thực, code đơn giản
+// FIXED AdminOrderList.js - Lấy thông tin khách hàng thực từ database
 import React, { useEffect, useState } from "react";
 import orderApiService from "../../services/api/orderApiService";
 import authService from "../../services/api/authService";
@@ -8,6 +8,7 @@ const AdminOrderList = ({ onSelectOrder }) => {
   const [orders, setOrders] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [customerInfo, setCustomerInfo] = useState({}); // Cache thông tin khách hàng
 
   useEffect(() => {
     fetchOrders();
@@ -26,6 +27,9 @@ const AdminOrderList = ({ onSelectOrder }) => {
 
       setOrders(ordersData);
       
+      // FIXED: Lấy thông tin khách hàng thực từ account service
+      await fetchCustomerInfo(ordersData);
+      
     } catch (error) {
       console.error('Error fetching orders:', error);
       setError('Không thể tải danh sách đơn hàng');
@@ -33,6 +37,54 @@ const AdminOrderList = ({ onSelectOrder }) => {
       notificationManager.error('Không thể tải danh sách đơn hàng từ server');
     } finally {
       setLoading(false);
+    }
+  };
+
+  // FIXED: Lấy thông tin khách hàng thực từ account service
+  const fetchCustomerInfo = async (orders) => {
+    try {
+      const uniqueUserIds = [...new Set(orders.map(order => order.userId))];
+      const customerData = {};
+
+      // Lấy thông tin từng khách hàng
+      for (const userId of uniqueUserIds) {
+        try {
+          // Gọi API account service để lấy thông tin user
+          const response = await fetch(`http://localhost:9002/users/admin/${userId}`, {
+            headers: {
+              'Authorization': `Bearer ${authService.getAccessToken()}`,
+              'Content-Type': 'application/json'
+            }
+          });
+
+          if (response.ok) {
+            const data = await response.json();
+            if (data.code === 1000 && data.result) {
+              customerData[userId] = {
+                name: `${data.result.firstName || ''} ${data.result.lastName || ''}`.trim() || 'Không có tên',
+                email: data.result.email || 'Không có email',
+                phone: data.result.phoneNumber || 'Không có SĐT',
+                username: data.result.username || 'Không có username'
+              };
+            } else {
+              console.error(`Invalid response for user ${userId}:`, data);
+              customerData[userId] = null; // Không có dữ liệu thực
+            }
+          } else {
+            console.error(`API failed for user ${userId}, status:`, response.status);
+            customerData[userId] = null; // Không có dữ liệu thực
+          }
+        } catch (userError) {
+          console.error(`Error fetching user ${userId}:`, userError);
+          customerData[userId] = null; // Không có dữ liệu thực
+        }
+      }
+
+      setCustomerInfo(customerData);
+      console.log('Customer info loaded:', customerData);
+      
+    } catch (error) {
+      console.error('Error fetching customer info:', error);
     }
   };
 
@@ -65,7 +117,6 @@ const AdminOrderList = ({ onSelectOrder }) => {
       3: 'Đã giao hàng'
     };
     
-    // Handle invalid status
     if (![0, 1, 2, 3].includes(Number(status))) {
       return `Lỗi status: ${status}`;
     }
@@ -81,7 +132,6 @@ const AdminOrderList = ({ onSelectOrder }) => {
       3: '#10b981'
     };
     
-    // Invalid status = red
     if (![0, 1, 2, 3].includes(Number(status))) {
       return '#dc2626';
     }
@@ -89,14 +139,23 @@ const AdminOrderList = ({ onSelectOrder }) => {
     return colorMap[status] || '#6b7280';
   };
 
+  // FIXED: Lấy thông tin khách hàng thực từ cache - chỉ hiển thị nếu có dữ liệu
   const getCustomerName = (userId) => {
-    // Use actual user ID from database
-    return `User ${userId}`;
+    const customer = customerInfo[userId];
+    if (!customer) return `ID: ${userId} (Không tải được thông tin)`;
+    return customer.name;
   };
 
   const getCustomerEmail = (userId) => {
-    // Generate email based on user ID (for display only)
-    return `user${userId}@shop.com`;
+    const customer = customerInfo[userId];
+    if (!customer) return 'Không tải được email';
+    return customer.email;
+  };
+
+  const getCustomerPhone = (userId) => {
+    const customer = customerInfo[userId];
+    if (!customer) return 'Không tải được SĐT';
+    return customer.phone;
   };
 
   const handleDeleteOrder = async (orderId) => {
@@ -119,7 +178,7 @@ const AdminOrderList = ({ onSelectOrder }) => {
       <div className="admin-order-list">
         <div className="loading-container">
           <div className="loading-spinner"></div>
-          <p>Đang tải danh sách đơn hàng...</p>
+          <p>Đang tải danh sách đơn hàng và thông tin khách hàng...</p>
         </div>
       </div>
     );
@@ -163,6 +222,7 @@ const AdminOrderList = ({ onSelectOrder }) => {
                 <th>Mã đơn hàng</th>
                 <th>Khách hàng</th>
                 <th>Email</th>
+                <th>Số điện thoại</th>
                 <th>Tổng tiền</th>
                 <th>Trạng thái</th>
                 <th>Ngày đặt</th>
@@ -175,8 +235,22 @@ const AdminOrderList = ({ onSelectOrder }) => {
                   <td>
                     <strong>#{order.orderId}</strong>
                   </td>
-                  <td>{getCustomerName(order.userId)}</td>
-                  <td>{getCustomerEmail(order.userId)}</td>
+                  <td>
+                    <div style={{ display: 'flex', flexDirection: 'column' }}>
+                      <strong>{getCustomerName(order.userId)}</strong>
+                      <small style={{ color: '#6b7280' }}>ID: {order.userId}</small>
+                    </div>
+                  </td>
+                  <td>
+                    <span style={{ fontSize: '0.9rem' }}>
+                      {getCustomerEmail(order.userId)}
+                    </span>
+                  </td>
+                  <td>
+                    <span style={{ fontSize: '0.9rem', fontWeight: '500' }}>
+                      {getCustomerPhone(order.userId)}
+                    </span>
+                  </td>
                   <td>
                     <strong style={{ color: '#ef4444' }}>
                       {formatPrice(order.total)}
@@ -197,7 +271,11 @@ const AdminOrderList = ({ onSelectOrder }) => {
                       {getStatusText(order.status)}
                     </span>
                   </td>
-                  <td>{formatDate(order.createdDate)}</td>
+                  <td>
+                    <div style={{ fontSize: '0.9rem' }}>
+                      {formatDate(order.createdDate)}
+                    </div>
+                  </td>
                   <td>
                     <div style={{ display: 'flex', gap: '0.5rem' }}>
                       <button 
@@ -208,7 +286,8 @@ const AdminOrderList = ({ onSelectOrder }) => {
                           border: 'none',
                           padding: '0.25rem 0.5rem',
                           borderRadius: '4px',
-                          cursor: 'pointer'
+                          cursor: 'pointer',
+                          fontSize: '0.8rem'
                         }}
                       >
                         👁️ Chi tiết
@@ -221,7 +300,8 @@ const AdminOrderList = ({ onSelectOrder }) => {
                           border: 'none',
                           padding: '0.25rem 0.5rem',
                           borderRadius: '4px',
-                          cursor: 'pointer'
+                          cursor: 'pointer',
+                          fontSize: '0.8rem'
                         }}
                       >
                         🗑️ Xóa

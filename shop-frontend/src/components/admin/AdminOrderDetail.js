@@ -1,12 +1,14 @@
-// FIXED AdminOrderDetail.js - Dữ liệu thực, code đơn giản
+// FIXED AdminOrderDetail.js - Hiển thị thông tin khách hàng thực từ database
 import React, { useEffect, useState } from "react";
 import orderApiService from "../../services/api/orderApiService";
 import apiService from "../../services/api/apiService";
+import authService from "../../services/api/authService";
 import { notificationManager } from '../layout/Notification/Notification';
 
 const AdminOrderDetail = ({ orderId, onBack }) => {
   const [order, setOrder] = useState(null);
   const [productDetails, setProductDetails] = useState({});
+  const [customerData, setCustomerData] = useState(null); // FIXED: Thông tin khách hàng thực
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [updating, setUpdating] = useState(false);
@@ -29,6 +31,9 @@ const AdminOrderDetail = ({ orderId, onBack }) => {
       }
 
       setOrder(orderData);
+
+      // FIXED: Lấy thông tin khách hàng thực từ account service
+      await fetchCustomerData(orderData.userId);
 
       // Load product details if order has items
       if (orderData.items && orderData.items.length > 0) {
@@ -58,6 +63,49 @@ const AdminOrderDetail = ({ orderId, onBack }) => {
       notificationManager.error('Không thể tải chi tiết đơn hàng');
     } finally {
       setLoading(false);
+    }
+  };
+
+  // FIXED: Lấy thông tin khách hàng thực từ account service
+  const fetchCustomerData = async (userId) => {
+    try {
+      console.log('Fetching customer data for user ID:', userId);
+      
+      const response = await fetch(`http://localhost:9002/users/admin/${userId}`, {
+        headers: {
+          'Authorization': `Bearer ${authService.getAccessToken()}`,
+          'Content-Type': 'application/json'
+        }
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        console.log('Customer API response:', data);
+        
+        if (data.code === 1000 && data.result) {
+          const customer = {
+            id: data.result.id,
+            name: `${data.result.firstName || ''} ${data.result.lastName || ''}`.trim() || 'Không có tên',
+            email: data.result.email || 'Không có email',
+            phone: data.result.phoneNumber || 'Không có số điện thoại',
+            username: data.result.username || 'Không có username',
+            fullData: data.result
+          };
+          
+          setCustomerData(customer);
+          console.log('Customer data set:', customer);
+        } else {
+          console.error('Invalid customer data response:', data);
+          setCustomerData(null); // Không có dữ liệu thực
+        }
+      } else {
+        console.error(`HTTP error: ${response.status}`);
+        setCustomerData(null); // Không có dữ liệu thực
+      }
+    } catch (error) {
+      console.error('Error fetching customer data:', error);
+      setCustomerData(null); // Không có dữ liệu thực
+      notificationManager.error('Không thể tải thông tin khách hàng từ hệ thống');
     }
   };
 
@@ -112,15 +160,6 @@ const AdminOrderDetail = ({ orderId, onBack }) => {
     return statusMap[status] || `Status ${status}`;
   };
 
-  const getCustomerInfo = (userId) => {
-    return {
-      name: `User ${userId}`,
-      email: `user${userId}@shop.com`,
-      phone: 'N/A',
-      address: 'N/A'
-    };
-  };
-
   const handleStatusUpdate = async (newStatus) => {
     try {
       setUpdating(true);
@@ -147,7 +186,7 @@ const AdminOrderDetail = ({ orderId, onBack }) => {
       <div className="admin-order-detail">
         <div className="loading-container">
           <div className="loading-spinner"></div>
-          <p>Đang tải chi tiết đơn hàng...</p>
+          <p>Đang tải chi tiết đơn hàng và thông tin khách hàng...</p>
         </div>
       </div>
     );
@@ -187,7 +226,6 @@ const AdminOrderDetail = ({ orderId, onBack }) => {
   }
 
   const isDelivered = order.status === 3;
-  const customerInfo = getCustomerInfo(order.userId);
 
   return (
     <div className="admin-order-detail">
@@ -216,7 +254,7 @@ const AdminOrderDetail = ({ orderId, onBack }) => {
 
       <div className="detail-content">
         <div className="detail-grid">
-          {/* Customer Info */}
+          {/* FIXED: Customer Info - Hiển thị thông tin thực */}
           <div className="detail-section">
             <h3>👤 Thông tin khách hàng</h3>
             <div className="info-grid">
@@ -224,22 +262,48 @@ const AdminOrderDetail = ({ orderId, onBack }) => {
                 <label>Mã khách hàng:</label>
                 <span>#{order.userId}</span>
               </div>
-              <div className="info-item">
-                <label>Họ tên:</label>
-                <span>{customerInfo.name}</span>
-              </div>
-              <div className="info-item">
-                <label>Email:</label>
-                <span>{customerInfo.email}</span>
-              </div>
-              <div className="info-item">
-                <label>Số điện thoại:</label>
-                <span>{customerInfo.phone}</span>
-              </div>
-              <div className="info-item full-width">
-                <label>Địa chỉ giao hàng:</label>
-                <span>{customerInfo.address}</span>
-              </div>
+              {customerData ? (
+                <>
+                  <div className="info-item">
+                    <label>Tên đăng nhập:</label>
+                    <span>{customerData.username}</span>
+                  </div>
+                  <div className="info-item">
+                    <label>Họ tên:</label>
+                    <span style={{ fontWeight: '600', color: '#1f2937' }}>
+                      {customerData.name}
+                    </span>
+                  </div>
+                  <div className="info-item">
+                    <label>Email:</label>
+                    <span style={{ color: '#3b82f6' }}>
+                      {customerData.email}
+                    </span>
+                  </div>
+                  <div className="info-item">
+                    <label>Số điện thoại:</label>
+                    <span style={{ fontWeight: '500' }}>
+                      {customerData.phone}
+                    </span>
+                  </div>
+                  <div className="info-item full-width">
+                    <label>Trạng thái tài khoản:</label>
+                    <span style={{ 
+                      color: customerData.fullData?.enabled ? '#10b981' : '#ef4444',
+                      fontWeight: '600'
+                    }}>
+                      {customerData.fullData?.enabled ? '✅ Đang hoạt động' : '❌ Bị khóa'}
+                    </span>
+                  </div>
+                </>
+              ) : (
+                <div className="info-item full-width">
+                  <label>Thông tin khách hàng:</label>
+                  <span style={{ color: '#ef4444', fontStyle: 'italic' }}>
+                    ❌ Không thể tải thông tin khách hàng từ hệ thống
+                  </span>
+                </div>
+              )}
             </div>
           </div>
 
@@ -343,6 +407,64 @@ const AdminOrderDetail = ({ orderId, onBack }) => {
             </table>
           </div>
         </div>
+
+        {/* FIXED: Customer Details Section - Thông tin chi tiết từ hệ thống */}
+        {customerData?.fullData && (
+          <div className="detail-section full-width">
+            <h3>📊 Thông tin chi tiết khách hàng</h3>
+            <div className="customer-details-grid" style={{
+              display: 'grid',
+              gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))',
+              gap: '1rem',
+              marginTop: '1rem'
+            }}>
+              <div className="detail-card" style={{
+                background: '#f8fafc',
+                padding: '1rem',
+                borderRadius: '8px',
+                border: '1px solid #e5e7eb'
+              }}>
+                <h4 style={{ margin: '0 0 0.5rem 0', color: '#374151' }}>Thông tin tài khoản</h4>
+                <p><strong>ID:</strong> {customerData.fullData.id}</p>
+                <p><strong>Username:</strong> {customerData.fullData.username}</p>
+                <p><strong>Ngày tạo:</strong> {formatDate(customerData.fullData.createdAt)}</p>
+                <p><strong>Lần đăng nhập cuối:</strong> {customerData.fullData.lastLogin ? formatDate(customerData.fullData.lastLogin) : 'Chưa có'}</p>
+              </div>
+              
+              <div className="detail-card" style={{
+                background: '#f8fafc',
+                padding: '1rem',
+                borderRadius: '8px',
+                border: '1px solid #e5e7eb'
+              }}>
+                <h4 style={{ margin: '0 0 0.5rem 0', color: '#374151' }}>Vai trò & Quyền</h4>
+                {customerData.fullData.roles && customerData.fullData.roles.length > 0 ? (
+                  customerData.fullData.roles.map((role, index) => (
+                    <div key={index} style={{ marginBottom: '0.5rem' }}>
+                      <span style={{
+                        background: role.name === 'ADMIN' ? '#ef4444' : '#3b82f6',
+                        color: 'white',
+                        padding: '0.25rem 0.5rem',
+                        borderRadius: '4px',
+                        fontSize: '0.8rem',
+                        fontWeight: '600'
+                      }}>
+                        {role.name}
+                      </span>
+                      {role.description && (
+                        <p style={{ fontSize: '0.8rem', margin: '0.25rem 0', color: '#6b7280' }}>
+                          {role.description}
+                        </p>
+                      )}
+                    </div>
+                  ))
+                ) : (
+                  <p style={{ color: '#6b7280', fontStyle: 'italic' }}>Không có vai trò nào</p>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* Action Buttons */}
         <div className="detail-actions">
