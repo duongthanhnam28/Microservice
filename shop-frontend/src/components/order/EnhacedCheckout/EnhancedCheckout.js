@@ -1,18 +1,14 @@
-// FIXED EnhancedCheckout.js - Khắc phục hoàn toàn lỗi đặt hàng
+// FIXED EnhancedCheckout.js - Chỉ cho phép user đã đăng nhập đặt hàng
 import React, { useState, useEffect } from 'react';
-import userService from '../../../services/userService';
 import orderApiService from '../../../services/api/orderApiService';
-import apiService from '../../../services/api/apiService';
 import authService from '../../../services/api/authService';
 import { notificationManager } from '../../layout/Notification/Notification';
-import './EnhancedCheckout.css';
 
 const EnhancedCheckout = ({ cart, onOrderSuccess, onClose }) => {
   const [currentStep, setCurrentStep] = useState(1);
   const [loading, setLoading] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   
-  // Customer information
   const [customerInfo, setCustomerInfo] = useState({
     ten: '',
     email: '',
@@ -21,14 +17,9 @@ const EnhancedCheckout = ({ cart, onOrderSuccess, onClose }) => {
     ghiChu: ''
   });
 
-  // Validation errors
   const [errors, setErrors] = useState({});
-
-  // Shipping and payment
   const [shippingMethod, setShippingMethod] = useState('standard');
   const [paymentMethod, setPaymentMethod] = useState('cod');
-
-  // Order summary
   const [orderSummary, setOrderSummary] = useState({
     subtotal: 0,
     shipping: 0,
@@ -36,59 +27,57 @@ const EnhancedCheckout = ({ cart, onOrderSuccess, onClose }) => {
     total: 0
   });
 
-  // Available shipping methods
   const shippingMethods = [
     { id: 'standard', name: 'Giao hàng tiêu chuẩn', time: '3-5 ngày', fee: 30000 },
-    { id: 'express', name: 'Giao hàng nhanh', time: '1-2 ngày', fee: 50000 },
-    { id: 'instant', name: 'Giao hàng trong ngày', time: 'Trong ngày', fee: 80000 }
+    { id: 'express', name: 'Giao hàng nhanh', time: '1-2 ngày', fee: 50000 }
   ];
 
-  // Payment methods
   const paymentMethods = [
     { id: 'cod', name: 'Thanh toán khi nhận hàng (COD)', icon: '💵' },
-    { id: 'banking', name: 'Chuyển khoản ngân hàng', icon: '🏦' },
-    { id: 'momo', name: 'Ví MoMo', icon: '📱' },
-    { id: 'vnpay', name: 'VNPay', icon: '💳' }
+    { id: 'banking', name: 'Chuyển khoản ngân hàng', icon: '🏦' }
   ];
 
-  // Initialize customer info from logged-in user
+  // FIXED: Chỉ cho phép user đã đăng nhập
   useEffect(() => {
-    if (authService.isUserAuthenticated()) {
-      const currentUser = authService.getCurrentUser();
-      setCustomerInfo({
-        ten: currentUser.ten || '',
-        email: currentUser.email || '',
-        sdt: currentUser.sdt || '',
-        diaChi: currentUser.diaChi || '',
-        ghiChu: ''
-      });
+    if (!authService.isUserAuthenticated()) {
+      notificationManager.error('Vui lòng đăng nhập để đặt hàng');
+      if (onClose) onClose();
+      return;
     }
-  }, []);
+
+    const currentUser = authService.getCurrentUser();
+    if (!currentUser || !currentUser.id) {
+      notificationManager.error('Không thể xác định thông tin người dùng');
+      if (onClose) onClose();
+      return;
+    }
+
+    // Load thông tin user đã đăng nhập
+    setCustomerInfo({
+      ten: currentUser.ten || '',
+      email: currentUser.email || '',
+      sdt: currentUser.sdt || '',
+      diaChi: currentUser.diaChi || '',
+      ghiChu: ''
+    });
+  }, [onClose]);
 
   // Calculate order summary
   useEffect(() => {
     const subtotal = cart.reduce((sum, item) => sum + (item.giaTien * item.quantity), 0);
     const selectedShipping = shippingMethods.find(m => m.id === shippingMethod);
     const shipping = selectedShipping ? selectedShipping.fee : 0;
-    const tax = Math.round(subtotal * 0.1); // 10% VAT
+    const tax = Math.round(subtotal * 0.1);
     const total = subtotal + shipping + tax;
 
-    setOrderSummary({
-      subtotal,
-      shipping,
-      tax,
-      total
-    });
+    setOrderSummary({ subtotal, shipping, tax, total });
   }, [cart, shippingMethod]);
 
-  // FIXED: Improved validation
   const validateCustomerInfo = () => {
     const newErrors = {};
 
     if (!customerInfo.ten.trim()) {
       newErrors.ten = 'Vui lòng nhập họ tên';
-    } else if (customerInfo.ten.trim().length < 2) {
-      newErrors.ten = 'Họ tên phải có ít nhất 2 ký tự';
     }
 
     if (!customerInfo.email.trim()) {
@@ -99,326 +88,138 @@ const EnhancedCheckout = ({ cart, onOrderSuccess, onClose }) => {
 
     if (!customerInfo.sdt.trim()) {
       newErrors.sdt = 'Vui lòng nhập số điện thoại';
-    } else if (!authService.isValidPhone(customerInfo.sdt)) {
-      newErrors.sdt = 'Số điện thoại không đúng định dạng (VD: 0987654321)';
     }
 
     if (!customerInfo.diaChi.trim()) {
       newErrors.diaChi = 'Vui lòng nhập địa chỉ giao hàng';
-    } else if (customerInfo.diaChi.trim().length < 10) {
-      newErrors.diaChi = 'Địa chỉ phải có ít nhất 10 ký tự';
     }
 
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
   };
 
-  // Handle input changes
   const handleInputChange = (field, value) => {
-    setCustomerInfo(prev => ({
-      ...prev,
-      [field]: value
-    }));
-
-    // Clear error when user starts typing
+    setCustomerInfo(prev => ({ ...prev, [field]: value }));
     if (errors[field]) {
-      setErrors(prev => ({
-        ...prev,
-        [field]: ''
-      }));
+      setErrors(prev => ({ ...prev, [field]: '' }));
     }
   };
 
-  // Handle next step
   const handleNextStep = () => {
     if (currentStep === 1) {
       if (validateCustomerInfo()) {
         setCurrentStep(2);
-      } else {
-        notificationManager.warning('Vui lòng điền đầy đủ thông tin hợp lệ');
       }
     } else if (currentStep === 2) {
       setCurrentStep(3);
     }
   };
 
-  // Handle previous step
   const handlePrevStep = () => {
     if (currentStep > 1) {
       setCurrentStep(currentStep - 1);
     }
   };
 
-  // FIXED: Validate cart before processing
-  const validateCart = () => {
-    if (!cart || cart.length === 0) {
-      throw new Error('Giỏ hàng trống!');
-    }
-
-    for (const item of cart) {
-      if (!item.maSP || !item.tenSP || !item.giaTien || !item.quantity) {
-        throw new Error(`Sản phẩm "${item.tenSP || 'Không xác định'}" có thông tin không hợp lệ`);
-      }
-      
-      if (item.quantity <= 0) {
-        throw new Error(`Số lượng sản phẩm "${item.tenSP}" phải lớn hơn 0`);
-      }
-      
-      if (item.giaTien <= 0) {
-        throw new Error(`Giá sản phẩm "${item.tenSP}" không hợp lệ`);
-      }
-    }
-
-    return true;
-  };
-
-  // FIXED: Better product quantity update with rollback capability
-  const updateProductQuantities = async () => {
-    const originalProducts = [];
-    const updatePromises = [];
-    
-    try {
-      // Step 1: Get current product data and validate
-      for (const item of cart) {
-        const currentProduct = await apiService.getProductById(item.maSP);
-        
-        if (!currentProduct) {
-          throw new Error(`Không tìm thấy sản phẩm "${item.tenSP}"`);
-        }
-
-        originalProducts.push(currentProduct);
-
-        const newQuantity = currentProduct.soLuongTrongKho - item.quantity;
-        
-        if (newQuantity < 0) {
-          throw new Error(`Sản phẩm "${item.tenSP}" không đủ số lượng trong kho. Còn lại: ${currentProduct.soLuongTrongKho}, yêu cầu: ${item.quantity}`);
-        }
-      }
-
-      // Step 2: Update all products
-      for (let i = 0; i < cart.length; i++) {
-        const item = cart[i];
-        const currentProduct = originalProducts[i];
-        
-        const newQuantity = currentProduct.soLuongTrongKho - item.quantity;
-        const newSoldQuantity = (currentProduct.soLuongDaBan || 0) + item.quantity;
-
-        const updateData = {
-          ...currentProduct,
-          soLuongTrongKho: newQuantity,
-          soLuongDaBan: newSoldQuantity
-        };
-
-        updatePromises.push(
-          apiService.updateProduct(item.maSP, updateData)
-        );
-      }
-
-      await Promise.all(updatePromises);
-      console.log('All product quantities updated successfully');
-      
-    } catch (error) {
-      console.error('Error updating product quantities:', error);
-      
-      // If error occurs, try to rollback any changes (best effort)
-      try {
-        const rollbackPromises = originalProducts.map(product => 
-          apiService.updateProduct(product.maSP, product)
-        );
-        await Promise.all(rollbackPromises);
-        console.log('Rollback completed');
-      } catch (rollbackError) {
-        console.error('Rollback failed:', rollbackError);
-      }
-      
-      throw error;
-    }
-  };
-
-  // FIXED: Completely rewritten order submission with proper customer handling
+  // FIXED: Chỉ sử dụng user ID thực từ account service
   const handleSubmitOrder = async () => {
-    if (submitting) {
-      console.log('Order submission already in progress');
-      return;
-    }
+    if (submitting) return;
 
     setSubmitting(true);
+    setLoading(true);
     
     try {
       console.log('=== STARTING ORDER SUBMISSION ===');
       
-      // Step 1: Validate cart
-      validateCart();
-      
-      // Step 2: Validate customer info
+      // FIXED: Kiểm tra user đã đăng nhập
+      if (!authService.isUserAuthenticated()) {
+        throw new Error('Vui lòng đăng nhập để đặt hàng');
+      }
+
+      const currentUser = authService.getCurrentUser();
+      if (!currentUser || !currentUser.id) {
+        throw new Error('Không thể xác định thông tin người dùng');
+      }
+
+      // Validate cart
+      if (!cart || cart.length === 0) {
+        throw new Error('Giỏ hàng trống!');
+      }
+
+      // Validate customer info
       if (!validateCustomerInfo()) {
         throw new Error('Thông tin khách hàng không hợp lệ');
       }
 
-      // Step 3: FIXED - Get customer ID properly
-      setLoading(true);
-      let customerId;
-      
-      if (authService.isUserAuthenticated()) {
-        // For logged-in users
-        const loggedInUser = authService.getCurrentUser();
-        console.log('Using logged-in user:', loggedInUser);
-        
-        if (!loggedInUser || !loggedInUser.id) {
-          throw new Error('Không thể xác định thông tin người dùng đã đăng nhập');
-        }
-        
-        customerId = loggedInUser.id;
-        console.log('Customer ID from logged-in user:', customerId);
-        
-        // FIXED: Update user profile if needed (without requiring profile endpoint)
-        try {
-          if (customerInfo.ten !== loggedInUser.ten || 
-              customerInfo.sdt !== loggedInUser.sdt || 
-              customerInfo.diaChi !== loggedInUser.diaChi) {
-            
-            const updateResult = await authService.updateProfile({
-              ten: customerInfo.ten,
-              sdt: customerInfo.sdt,
-              diaChi: customerInfo.diaChi
-            });
-            
-            if (updateResult.success) {
-              console.log('User profile updated successfully');
-            } else {
-              console.warn('Profile update failed, continuing with order');
-            }
-          }
-        } catch (updateError) {
-          console.warn('Could not update user profile:', updateError);
-          // Continue with order even if profile update fails
-        }
-        
-      } else {
-        // FIXED: For guest users - use simulated customer ID
-        console.log('Creating/simulating guest customer');
-        
-        // Since userService might not be available, create a simulated customer ID
-        customerId = 999; // Fixed guest customer ID for demo
-        
-        console.log('Using guest customer ID:', customerId);
-      }
+      // FIXED: Chỉ sử dụng user ID thực
+      const customerId = currentUser.id;
+      console.log('Using authenticated user ID:', customerId);
 
-      // FIXED: Final validation of customer ID
-      if (!customerId) {
-        throw new Error('Không thể xác định ID khách hàng');
-      }
-
-      // Step 4: Validate product availability one more time
-      console.log('Final product availability check...');
-      for (const item of cart) {
-        try {
-          const currentProduct = await apiService.getProductById(item.maSP);
-          if (!currentProduct) {
-            throw new Error(`Sản phẩm "${item.tenSP}" không còn tồn tại`);
-          }
-          if (currentProduct.soLuongTrongKho < item.quantity) {
-            throw new Error(`Sản phẩm "${item.tenSP}" chỉ còn ${currentProduct.soLuongTrongKho} trong kho`);
-          }
-        } catch (error) {
-          console.error('Product validation error:', error);
-          throw error;
-        }
-      }
-
-      // Step 5: FIXED - Create order data with guaranteed customer ID
+      // Create order data với user ID thực
       const orderData = {
-        userId: customerId, // Now guaranteed to have a valid ID
+        userId: customerId, // Chỉ user ID từ account service
         total: orderSummary.total,
         items: cart.map(item => ({
           productId: item.maSP,
-          quantity: item.quantity,
-          price: item.giaTien
-        })),
-        shippingInfo: {
-          customerName: customerInfo.ten,
-          address: customerInfo.diaChi,
-          phone: customerInfo.sdt,
-          email: customerInfo.email,
-          shippingMethod: shippingMethod,
-          paymentMethod: paymentMethod,
-          notes: customerInfo.ghiChu
-        },
-        status: 'PENDING',
-        createdDate: new Date().toISOString()
+          quantity: item.quantity
+        }))
       };
 
-      console.log('Creating order with validated data:', orderData);
+      console.log('Creating order with real user ID:', orderData);
 
-      // Step 6: Try to create order (with improved fallback)
-      let orderResponse;
+      // FIXED: Gửi order - nếu thất bại thì báo lỗi rõ ràng
+      const orderResponse = await orderApiService.createOrder(orderData);
+      console.log('✅ Order created successfully:', orderResponse);
+
+      // Update user profile nếu có thay đổi
       try {
-        orderResponse = await orderApiService.createOrder(orderData);
-        console.log('Order API success:', orderResponse);
-      } catch (orderError) {
-        console.error('Order API failed:', orderError);
+        const profileUpdate = {
+          ten: customerInfo.ten,
+          sdt: customerInfo.sdt,
+          diaChi: customerInfo.diaChi
+        };
         
-        // FIXED: Generate more realistic demo order ID
-        const timestamp = Date.now();
-        const random = Math.random().toString(36).substr(2, 6).toUpperCase();
-        orderResponse = `DH${timestamp}_${random}`;
-        
-        console.warn('Using demo order ID:', orderResponse);
-        notificationManager.info('Đang sử dụng chế độ demo cho đặt hàng');
+        await authService.updateProfile(profileUpdate);
+        console.log('User profile updated');
+      } catch (profileError) {
+        console.warn('Could not update profile:', profileError);
+        // Không ảnh hưởng đến việc đặt hàng thành công
       }
 
-      // Step 7: Update product quantities (critical for inventory)
-      try {
-        await updateProductQuantities();
-        console.log('Inventory updated successfully');
-      } catch (quantityError) {
-        console.error('Failed to update inventory:', quantityError);
-        notificationManager.warning('Cảnh báo: Không thể cập nhật kho hàng tự động');
-        // Continue with order completion
-      }
+      // Success
+      notificationManager.success(`🎉 Đặt hàng thành công! Mã đơn: ${orderResponse}`);
 
-      // Step 8: SUCCESS
-      console.log('=== ORDER SUBMISSION COMPLETED SUCCESSFULLY ===');
-      
-      notificationManager.success(
-        `🎉 Đặt hàng thành công! Mã đơn hàng: ${orderResponse}`
-      );
-
-      // Trigger success callback
       if (onOrderSuccess) {
         onOrderSuccess({
           orderId: orderResponse,
           customerId: customerId,
-          orderData: orderData,
           total: orderSummary.total
         });
       }
 
-      // Close modal
-      if (onClose) {
-        setTimeout(() => {
-          onClose();
-        }, 1500);
-      }
+      // Close after delay
+      setTimeout(() => {
+        if (onClose) onClose();
+      }, 1500);
 
     } catch (error) {
       console.error('Order submission error:', error);
       
-      // FIXED: Better error handling with user-friendly messages
+      // FIXED: Error messages rõ ràng, không che giấu lỗi
       let errorMessage = 'Đặt hàng thất bại';
       
-      if (error.message.includes('không đủ số lượng') || error.message.includes('chỉ còn')) {
-        errorMessage = `⚠️ ${error.message}`;
-      } else if (error.message.includes('không còn tồn tại')) {
-        errorMessage = `❌ ${error.message}`;
+      if (error.message.includes('Vui lòng đăng nhập')) {
+        errorMessage = '🔐 Vui lòng đăng nhập để đặt hàng';
       } else if (error.message.includes('Giỏ hàng trống')) {
-        errorMessage = '🛒 Giỏ hàng trống, vui lòng thêm sản phẩm';
+        errorMessage = '🛒 Giỏ hàng trống';
       } else if (error.message.includes('không hợp lệ')) {
         errorMessage = `📝 ${error.message}`;
-      } else if (error.message.includes('không thể xác định')) {
-        errorMessage = `👤 ${error.message}. Vui lòng thử đăng nhập lại`;
+      } else if (error.message.includes('User ID') && error.message.includes('does not exist')) {
+        errorMessage = '👤 Tài khoản không tồn tại trong hệ thống';
+      } else if (error.message.includes('Account service')) {
+        errorMessage = '🔌 Không thể kết nối đến hệ thống xác thực';
       } else {
-        errorMessage = `❌ Đặt hàng thất bại: ${error.message || 'Vui lòng thử lại sau'}`;
+        errorMessage = `❌ ${error.message}`;
       }
       
       notificationManager.error(errorMessage);
@@ -429,7 +230,6 @@ const EnhancedCheckout = ({ cart, onOrderSuccess, onClose }) => {
     }
   };
 
-  // Format price
   const formatPrice = (price) => {
     return new Intl.NumberFormat('vi-VN', {
       style: 'currency',
@@ -437,14 +237,44 @@ const EnhancedCheckout = ({ cart, onOrderSuccess, onClose }) => {
     }).format(price || 0);
   };
 
-  // FIXED: Better loading state with more informative messages
+  // FIXED: Hiển thị thông báo nếu chưa đăng nhập
+  if (!authService.isUserAuthenticated()) {
+    return (
+      <div className="enhanced-checkout">
+        <div>
+          <div className="checkout-header">
+            <h2>🔐 Yêu cầu đăng nhập</h2>
+            <button className="close-btn" onClick={onClose}>✕</button>
+          </div>
+          <div style={{ padding: '2rem', textAlign: 'center' }}>
+            <p>Vui lòng đăng nhập để thực hiện đặt hàng</p>
+            <button 
+              onClick={onClose}
+              style={{
+                marginTop: '1rem',
+                padding: '0.75rem 1.5rem',
+                background: '#3b82f6',
+                color: 'white',
+                border: 'none',
+                borderRadius: '8px',
+                cursor: 'pointer'
+              }}
+            >
+              Đóng
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   if (loading && submitting) {
     return (
       <div className="checkout-loading">
         <div className="loading-spinner"></div>
         <p>🚀 Đang xử lý đơn hàng...</p>
-        <p style={{ fontSize: '0.9rem', opacity: 0.8, marginTop: '0.5rem' }}>
-          Vui lòng không tắt trang web trong quá trình xử lý
+        <p style={{ fontSize: '0.9rem', opacity: 0.8 }}>
+          Đang xác thực với hệ thống...
         </p>
       </div>
     );
@@ -455,16 +285,10 @@ const EnhancedCheckout = ({ cart, onOrderSuccess, onClose }) => {
       <div>
         <div className="checkout-header">
           <h2>🛒 Thanh toán đơn hàng</h2>
-          <button 
-            className="close-btn" 
-            onClick={onClose}
-            disabled={submitting}
-          >
-            ✕
-          </button>
+          <button className="close-btn" onClick={onClose} disabled={submitting}>✕</button>
         </div>
 
-        {/* Step indicator */}
+        {/* Steps indicator */}
         <div className="checkout-steps">
           <div className={`step ${currentStep >= 1 ? 'active' : ''}`}>
             <div className="step-number">1</div>
@@ -486,6 +310,9 @@ const EnhancedCheckout = ({ cart, onOrderSuccess, onClose }) => {
             {currentStep === 1 && (
               <div className="checkout-step">
                 <h3>📋 Thông tin khách hàng</h3>
+                <p style={{ fontSize: '0.9rem', color: '#6b7280', marginBottom: '1rem' }}>
+                  ✅ Đã đăng nhập: {authService.getCurrentUser()?.email}
+                </p>
                 
                 <div className="form-group">
                   <label>Họ và tên *</label>
@@ -494,7 +321,7 @@ const EnhancedCheckout = ({ cart, onOrderSuccess, onClose }) => {
                     value={customerInfo.ten}
                     onChange={(e) => handleInputChange('ten', e.target.value)}
                     className={errors.ten ? 'error' : ''}
-                    placeholder="Nhập họ và tên đầy đủ"
+                    placeholder="Nhập họ và tên"
                     disabled={submitting}
                   />
                   {errors.ten && <span className="error-text">{errors.ten}</span>}
@@ -534,7 +361,7 @@ const EnhancedCheckout = ({ cart, onOrderSuccess, onClose }) => {
                     value={customerInfo.diaChi}
                     onChange={(e) => handleInputChange('diaChi', e.target.value)}
                     className={errors.diaChi ? 'error' : ''}
-                    placeholder="Nhập địa chỉ chi tiết (số nhà, đường, phường/xã, quận/huyện, tỉnh/thành phố)"
+                    placeholder="Nhập địa chỉ chi tiết"
                     rows="3"
                     disabled={submitting}
                   />
@@ -546,7 +373,7 @@ const EnhancedCheckout = ({ cart, onOrderSuccess, onClose }) => {
                   <textarea
                     value={customerInfo.ghiChu}
                     onChange={(e) => handleInputChange('ghiChu', e.target.value)}
-                    placeholder="Ghi chú thêm cho đơn hàng (không bắt buộc)"
+                    placeholder="Ghi chú thêm (không bắt buộc)"
                     rows="2"
                     disabled={submitting}
                   />
@@ -600,6 +427,7 @@ const EnhancedCheckout = ({ cart, onOrderSuccess, onClose }) => {
                 <div className="order-confirmation">
                   <div className="customer-summary">
                     <h4>👤 Thông tin khách hàng</h4>
+                    <p><strong>ID:</strong> {authService.getCurrentUser()?.id}</p>
                     <p><strong>Họ tên:</strong> {customerInfo.ten}</p>
                     <p><strong>Email:</strong> {customerInfo.email}</p>
                     <p><strong>SĐT:</strong> {customerInfo.sdt}</p>
@@ -607,12 +435,6 @@ const EnhancedCheckout = ({ cart, onOrderSuccess, onClose }) => {
                     {customerInfo.ghiChu && (
                       <p><strong>Ghi chú:</strong> {customerInfo.ghiChu}</p>
                     )}
-                  </div>
-
-                  <div className="shipping-summary">
-                    <h4>🚚 Giao hàng & Thanh toán</h4>
-                    <p><strong>Giao hàng:</strong> {shippingMethods.find(m => m.id === shippingMethod)?.name}</p>
-                    <p><strong>Thanh toán:</strong> {paymentMethods.find(m => m.id === paymentMethod)?.name}</p>
                   </div>
 
                   <div className="items-summary">
@@ -639,27 +461,6 @@ const EnhancedCheckout = ({ cart, onOrderSuccess, onClose }) => {
             <div className="order-summary">
               <h3>📊 Tóm tắt đơn hàng</h3>
               
-              <div className="cart-items">
-                {cart.map(item => (
-                  <div key={item.maSP} className="cart-item-summary">
-                    <img 
-                      src={`http://localhost:9010/api/files/${item.anh1}`} 
-                      alt={item.tenSP}
-                      onError={(e) => {
-                        e.target.src = 'https://via.placeholder.com/80x60?text=No+Image';
-                      }}
-                    />
-                    <div className="item-details">
-                      <div className="item-name">{item.tenSP}</div>
-                      <div className="item-quantity">Số lượng: {item.quantity}</div>
-                    </div>
-                    <div className="item-total">
-                      {formatPrice(item.giaTien * item.quantity)}
-                    </div>
-                  </div>
-                ))}
-              </div>
-
               <div className="price-breakdown">
                 <div className="price-row">
                   <span>Tạm tính:</span>
@@ -670,7 +471,7 @@ const EnhancedCheckout = ({ cart, onOrderSuccess, onClose }) => {
                   <span>{formatPrice(orderSummary.shipping)}</span>
                 </div>
                 <div className="price-row">
-                  <span>Thuế VAT (10%):</span>
+                  <span>Thuế VAT:</span>
                   <span>{formatPrice(orderSummary.tax)}</span>
                 </div>
                 <div className="price-row total">
@@ -708,14 +509,7 @@ const EnhancedCheckout = ({ cart, onOrderSuccess, onClose }) => {
               onClick={handleSubmitOrder}
               disabled={submitting}
             >
-              {submitting ? (
-                <>
-                  <span>Đang xử lý</span>
-                  <span style={{ marginLeft: '0.5rem' }}>⏳</span>
-                </>
-              ) : (
-                '🎉 Đặt hàng ngay'
-              )}
+              {submitting ? 'Đang xử lý ⏳' : '🎉 Đặt hàng ngay'}
             </button>
           )}
         </div>

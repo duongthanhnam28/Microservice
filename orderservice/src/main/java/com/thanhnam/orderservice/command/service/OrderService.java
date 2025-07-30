@@ -1,4 +1,4 @@
-// FIXED OrderService.java - Xóa bỏ demo users, chỉ dùng dữ liệu thực từ account service
+// FIXED OrderService.java - Chỉ dùng user thực từ account service
 package com.thanhnam.orderservice.command.service;
 
 import com.thanhnam.orderservice.command.data.Order;
@@ -7,16 +7,13 @@ import com.thanhnam.orderservice.command.data.OrderDetail;
 import com.thanhnam.orderservice.command.data.OrderDetailRepository;
 import com.thanhnam.orderservice.command.model.CreateOrderRequest;
 import com.thanhnam.orderservice.client.clients.AccountServiceClient;
-import com.thanhnam.orderservice.client.clients.ProductServiceClient;
+import com.thanhnam.orderservice.client.dto.ApiResponse;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDate;
-import com.thanhnam.orderservice.client.dto.ApiResponse;
-import java.util.List;
 
 @Service
 @Slf4j
@@ -24,8 +21,6 @@ import java.util.List;
 public class OrderService {
     private final OrderRepository orderRepository;
     private final OrderDetailRepository orderDetailRepository;
-    private final JdbcTemplate jdbcTemplate;
-    private final ProductServiceClient productServiceClient;
     private final AccountServiceClient accountServiceClient;
 
     @Transactional
@@ -37,15 +32,16 @@ public class OrderService {
                 throw new IllegalArgumentException("User ID is required");
             }
 
-            // FIXED: Chỉ kiểm tra user thực, không dùng demo users
-            if (!userExistsInDatabase(request.getUserId().longValue())) {
-                throw new IllegalArgumentException("User ID " + request.getUserId() + " does not exist in system");
+            // FIXED: Chỉ kiểm tra user thực từ account service
+            if (!userExistsInAccountService(request.getUserId().longValue())) {
+                throw new IllegalArgumentException("User ID " + request.getUserId() + " does not exist in account service");
             }
 
             if (request.getItems() == null || request.getItems().isEmpty()) {
                 throw new IllegalArgumentException("Order must contain at least one product");
             }
 
+            // Tạo order
             Order order = new Order();
             order.setUserId(request.getUserId());
             order.setTotal(request.getTotal());
@@ -55,6 +51,7 @@ public class OrderService {
 
             log.info("Order created with ID: {}", savedOrder.getOrderId());
 
+            // Tạo order details
             for (CreateOrderRequest.OrderItem item : request.getItems()) {
                 OrderDetail detail = OrderDetail.builder()
                         .orderId(savedOrder.getOrderId())
@@ -62,7 +59,6 @@ public class OrderService {
                         .quantity(item.getQuantity())
                         .build();
                 orderDetailRepository.save(detail);
-                log.info("Saved order detail: Product {}, Quantity {}", item.getProductId(), item.getQuantity());
             }
 
             return savedOrder;
@@ -70,6 +66,35 @@ public class OrderService {
         } catch (Exception e) {
             log.error("Error creating order: ", e);
             throw new RuntimeException("Failed to create order: " + e.getMessage(), e);
+        }
+    }
+
+    // FIXED: Chỉ kiểm tra user từ account service thực tế
+    private boolean userExistsInAccountService(Long userId) {
+        try {
+            log.info("Checking user existence in account service: {}", userId);
+
+            ApiResponse<Boolean> response = accountServiceClient.checkUserExists(userId);
+
+            if (response == null) {
+                log.error("Account service returned null response for user: {}", userId);
+                throw new RuntimeException("Account service is not available");
+            }
+
+            if (response.getResult() == null) {
+                log.error("Account service returned null result for user: {}", userId);
+                throw new RuntimeException("Invalid response from account service");
+            }
+
+            boolean exists = response.getResult();
+            log.info("User {} exists in account service: {}", userId, exists);
+
+            return exists;
+
+        } catch (Exception e) {
+            log.error("Error checking user existence in account service for user {}: {}", userId, e.getMessage());
+            // KHÔNG dùng fallback - ném lỗi để user biết
+            throw new RuntimeException("Unable to verify user existence: " + e.getMessage());
         }
     }
 
@@ -89,97 +114,14 @@ public class OrderService {
             Order order = orderRepository.findById(orderId)
                     .orElseThrow(() -> new IllegalArgumentException("Order not found: " + orderId));
 
-            Integer oldStatus = order.getStatus();
-
-            if (oldStatus != null && oldStatus.equals(status)) {
-                log.info("Order {} already has status {}", orderId, status);
-                return;
-            }
-
             order.setStatus(status);
             orderRepository.save(order);
 
-            if (status == 3 && (oldStatus == null || oldStatus != 3)) {
-                updateRevenue(order);
-                log.info("Revenue updated for delivered order: {}", orderId);
-            }
-
-            log.info("Order {} status updated: {} -> {}", orderId, oldStatus, status);
+            log.info("Order {} status updated to {}", orderId, status);
 
         } catch (Exception e) {
             log.error("Error updating order status: {}", e.getMessage(), e);
             throw new RuntimeException("Failed to update order status: " + e.getMessage());
-        }
-    }
-
-    private void updateRevenue(Order order) {
-        try {
-            log.info("Updating revenue for delivered order: {}", order.getOrderId());
-
-            LocalDate deliveryDate = LocalDate.now();
-
-            String updateRevenueSql = """
-                INSERT INTO DOANHTHU (Ngay, TongDoanhThu, SoDonHang, NguoiCapNhat) 
-                VALUES (?, ?, 1, 'SYSTEM')
-                ON DUPLICATE KEY UPDATE 
-                    TongDoanhThu = TongDoanhThu + VALUES(TongDoanhThu),
-                    SoDonHang = SoDonHang + 1,
-                    NgayCapNhat = NOW()
-                """;
-
-            int rowsUpdated = jdbcTemplate.update(updateRevenueSql,
-                    deliveryDate,
-                    order.getTotal()
-            );
-
-            if (rowsUpdated > 0) {
-                log.info("Revenue updated successfully for order {}: +{} VND",
-                        order.getOrderId(), order.getTotal());
-            }
-
-            String updateTotalRevenueSql = """
-                INSERT INTO THONGKE (LoaiThongKe, GiaTri, NgayCapNhat) 
-                VALUES ('TOTAL_REVENUE', ?, NOW())
-                ON DUPLICATE KEY UPDATE 
-                    GiaTri = GiaTri + VALUES(GiaTri),
-                    NgayCapNhat = NOW()
-                """;
-
-            jdbcTemplate.update(updateTotalRevenueSql, order.getTotal());
-
-            log.info("Total revenue statistics updated for order: {}", order.getOrderId());
-
-        } catch (Exception e) {
-            log.error("Error updating revenue for order {}: {}", order.getOrderId(), e.getMessage());
-        }
-    }
-
-    public Long getTotalRevenue() {
-        try {
-            String sql = "SELECT COALESCE(SUM(GiaTri), 0) FROM THONGKE WHERE LoaiThongKe = 'TOTAL_REVENUE'";
-            return jdbcTemplate.queryForObject(sql, Long.class);
-        } catch (Exception e) {
-            log.error("Error getting total revenue: {}", e.getMessage());
-            return 0L;
-        }
-    }
-
-    public Long getRevenueByDate(LocalDate date) {
-        try {
-            String sql = "SELECT COALESCE(TongDoanhThu, 0) FROM DOANHTHU WHERE Ngay = ?";
-            return jdbcTemplate.queryForObject(sql, Long.class, date);
-        } catch (Exception e) {
-            log.error("Error getting revenue by date {}: {}", date, e.getMessage());
-            return 0L;
-        }
-    }
-
-    public Integer getOrderCountByStatus(Integer status) {
-        try {
-            return Math.toIntExact(orderRepository.countByStatus(status));
-        } catch (Exception e) {
-            log.error("Error getting order count by status {}: {}", status, e.getMessage());
-            return 0;
         }
     }
 
@@ -196,12 +138,11 @@ public class OrderService {
                 throw new IllegalArgumentException("Order with ID " + orderId + " does not exist");
             }
 
-            List<OrderDetail> orderDetails = orderDetailRepository.findByOrderId(orderId);
-            if (!orderDetails.isEmpty()) {
-                orderDetailRepository.deleteAll(orderDetails);
-                log.info("Deleted {} order details for order {}", orderDetails.size(), orderId);
-            }
+            // Xóa order details trước
+            orderDetailRepository.findByOrderId(orderId)
+                    .forEach(orderDetailRepository::delete);
 
+            // Xóa order
             orderRepository.deleteById(orderId);
             log.info("Order {} cancelled successfully", orderId);
 
@@ -211,31 +152,12 @@ public class OrderService {
         }
     }
 
-    // FIXED: Chỉ kiểm tra user thực từ account service, bỏ hết demo users
-    private boolean userExistsInDatabase(Long userId) {
+    public Long getOrderCountByStatus(Integer status) {
         try {
-            log.info("Checking if user exists in database with ID: {}", userId);
-
-            ApiResponse<Boolean> response = accountServiceClient.checkUserExists(userId);
-
-            if (response == null) {
-                log.error("Null response from account-service for user ID: {}", userId);
-                return false;
-            }
-
-            Boolean exists = response.getResult();
-            if (exists == null) {
-                log.error("Null result from account-service for user ID: {}", userId);
-                return false;
-            }
-
-            log.info("User existence check for ID {}: {}", userId, exists);
-            return exists;
-
+            return orderRepository.countByStatus(status);
         } catch (Exception e) {
-            log.error("Error checking user ID {}: {}", userId, e.getMessage(), e);
-            // KHÔNG fallback về demo users, trả về false nếu lỗi
-            return false;
+            log.error("Error getting order count by status {}: {}", status, e.getMessage());
+            return 0L;
         }
     }
 }
