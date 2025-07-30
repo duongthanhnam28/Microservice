@@ -67,47 +67,48 @@ const AdminOrderDetail = ({ orderId, onBack }) => {
   };
 
   // FIXED: Lấy thông tin khách hàng thực từ account service
-  const fetchCustomerData = async (userId) => {
-    try {
-      console.log('Fetching customer data for user ID:', userId);
-      
-      const response = await fetch(`http://localhost:9002/users/admin/${userId}`, {
-        headers: {
-          'Authorization': `Bearer ${authService.getAccessToken()}`,
-          'Content-Type': 'application/json'
-        }
-      });
+  // shop-frontend/src/components/admin/AdminOrderDetail.js
+// Sửa fetchCustomerData tương tự
 
-      if (response.ok) {
-        const data = await response.json();
-        console.log('Customer API response:', data);
+const fetchCustomerData = async (userId) => {
+  try {
+    console.log('Fetching customer data for user ID:', userId);
+    
+    // SỬA: Sử dụng authService
+    const response = await authService.makeAuthenticatedRequest(
+      `http://localhost:9002/users/admin/${userId}`
+    );
+
+    if (response && response.ok) {
+      const data = await response.json();
+      console.log('Customer API response:', data);
+      
+      if (data.code === 1000 && data.result) {
+        const customer = {
+          id: data.result.id,
+          name: `${data.result.firstName || ''} ${data.result.lastName || ''}`.trim() || 'Không có tên',
+          email: data.result.email || 'Không có email',
+          phone: data.result.phoneNumber || 'Không có số điện thoại',
+          username: data.result.username || 'Không có username',
+          fullData: data.result
+        };
         
-        if (data.code === 1000 && data.result) {
-          const customer = {
-            id: data.result.id,
-            name: `${data.result.firstName || ''} ${data.result.lastName || ''}`.trim() || 'Không có tên',
-            email: data.result.email || 'Không có email',
-            phone: data.result.phoneNumber || 'Không có số điện thoại',
-            username: data.result.username || 'Không có username',
-            fullData: data.result
-          };
-          
-          setCustomerData(customer);
-          console.log('Customer data set:', customer);
-        } else {
-          console.error('Invalid customer data response:', data);
-          setCustomerData(null); // Không có dữ liệu thực
-        }
+        setCustomerData(customer);
+        console.log('Customer data set:', customer);
       } else {
-        console.error(`HTTP error: ${response.status}`);
-        setCustomerData(null); // Không có dữ liệu thực
+        console.error('Invalid customer data response:', data);
+        setCustomerData(null);
       }
-    } catch (error) {
-      console.error('Error fetching customer data:', error);
-      setCustomerData(null); // Không có dữ liệu thực
-      notificationManager.error('Không thể tải thông tin khách hàng từ hệ thống');
+    } else {
+      console.error(`Failed to fetch user ${userId}`);
+      setCustomerData(null);
     }
-  };
+  } catch (error) {
+    console.error('Error fetching customer data:', error);
+    setCustomerData(null);
+    notificationManager.error('Không thể tải thông tin khách hàng từ hệ thống');
+  }
+};
 
   const formatPrice = (price) => {
     return new Intl.NumberFormat('vi-VN', {

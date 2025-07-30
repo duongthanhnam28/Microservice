@@ -2,12 +2,13 @@
 import React, { useState, useEffect } from 'react';
 import apiService from '../../../services/api/apiService';
 import orderApiService from '../../../services/api/orderApiService';
+import authService from '../../../services/api/authService';
 import { notificationManager } from '../../layout/Notification/Notification';
 import './AdminLayout.css';
 import AdminOrderList from '../AdminOrderList';
 import AdminOrderDetail from '../AdminOrderDetail';
 
-const AdminLayout = ({ onModeChange }) => {
+const AdminLayout = ({ onModeChange, authState, onLogout }) => {
   const [activeMenu, setActiveMenu] = useState('dashboard');
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
   
@@ -46,6 +47,56 @@ const AdminLayout = ({ onModeChange }) => {
 
   // Orders states
   const [selectedOrderId, setSelectedOrderId] = useState(null);
+
+  // Thêm state cho chi tiết sản phẩm
+  const [showProductDetail, setShowProductDetail] = useState(false);
+
+  // Cập nhật hoặc tạo lại openProductModal
+  const openProductModal = (type, product = null) => {
+    setProductModalType(type);
+    setSelectedProduct(product);
+    
+    if (type === 'view') {
+      setShowProductDetail(true);
+    } else {
+      if (type === 'edit' && product) {
+        setEditingProduct({ ...product });
+      } else if (type === 'add') {
+        setEditingProduct({
+          tenSP: '', moTa: '', giaTien: '', soLuongTrongKho: '',
+          maDanhMuc: '', maHang: '', anh1: '', soLuongDaBan: 0
+        });
+      }
+      setShowProductModal(true);
+    }
+  };
+
+  // THÊM: Check permissions
+  const canManageProducts = authService.hasPermission('MANAGE_PRODUCTS') || authService.hasRole('ADMIN');
+  const canManageBrands = authService.hasPermission('MANAGE_BRANDS') || authService.hasRole('ADMIN');
+  const canManageCategories = authService.hasPermission('MANAGE_CATEGORIES') || authService.hasRole('ADMIN');
+  const canViewOrders = authService.hasPermission('VIEW_ORDERS') || authService.hasRole('ADMIN');
+  const canViewDashboard = authService.hasPermission('VIEW_DASHBOARD') || authService.hasRole('ADMIN');
+
+  // KIỂM TRA ADMIN KHI MOUNT
+  useEffect(() => {
+    // Nếu không phải admin, chuyển về customer
+    if (!authService.isAdmin()) {
+      notificationManager.error('Bạn không có quyền truy cập trang quản trị');
+      if (onModeChange) {
+        onModeChange('customer');
+      }
+    }
+  }, [onModeChange]);
+
+  // Menu items đơn giản - không cần check quyền
+  const getMenuItems = () => [
+    { id: 'dashboard', title: 'Trang chủ', icon: '🏠' },
+    { id: 'products', title: 'Quản lý sản phẩm', icon: '📦' },
+    { id: 'brands', title: 'Quản lý thương hiệu', icon: '🏷️' },
+    { id: 'categories', title: 'Quản lý danh mục', icon: '📂' },
+    { id: 'orders', title: 'Quản lý đơn hàng', icon: '🧾' }
+  ];
 
   // FIXED: Load data và tính toán thống kê thực tế
   useEffect(() => {
@@ -183,29 +234,7 @@ const AdminLayout = ({ onModeChange }) => {
     return `http://localhost:9010/api/files/${filename}`;
   };
 
-  const getMenuItems = () => [
-    { id: 'dashboard', title: 'Trang chủ', icon: '🏠' },
-    { id: 'products', title: 'Quản lý sản phẩm', icon: '📦' },
-    { id: 'brands', title: 'Quản lý thương hiệu', icon: '🏷️' },
-    { id: 'categories', title: 'Quản lý danh mục', icon: '📂' },
-    { id: 'orders', title: 'Quản lý đơn hàng', icon: '🧾' }
-  ];
-
-  // Product functions
-  const openProductModal = (type, product = null) => {
-    setProductModalType(type);
-    setSelectedProduct(product);
-    if (type === 'edit' && product) {
-      setEditingProduct({ ...product });
-    } else if (type === 'add') {
-      setEditingProduct({
-        tenSP: '', moTa: '', giaTien: '', soLuongTrongKho: '',
-        maDanhMuc: '', maHang: '', anh1: '', soLuongDaBan: 0
-      });
-    }
-    setShowProductModal(true);
-  };
-
+  // CẬP NHẬT: Các handler với check permission
   const handleSaveProduct = async () => {
     try {
       if (!editingProduct.tenSP?.trim()) {
@@ -236,18 +265,28 @@ const AdminLayout = ({ onModeChange }) => {
       setShowProductModal(false);
     } catch (error) {
       console.error('Save product error:', error);
-      notificationManager.error('Có lỗi xảy ra: ' + error.message);
+      
+      // Xử lý lỗi 401 từ backend
+      if (error.message.includes('UNAUTHORIZED')) {
+        notificationManager.error('Phiên đăng nhập hết hạn. Vui lòng đăng nhập lại');
+        if (onLogout) onLogout();
+      } else {
+        notificationManager.error('Có lỗi xảy ra: ' + error.message);
+      }
     }
   };
 
   const handleDeleteProduct = async (product) => {
-    if (window.confirm(`Xóa sản phẩm "${product.tenSP}"?`)) {
-      try {
-        await apiService.deleteProduct(product.maSP);
-        setProducts(prev => prev.filter(p => p.maSP !== product.maSP));
-        notificationManager.success('Xóa sản phẩm thành công');
-      } catch (error) {
-        console.error('Delete product error:', error);
+    try {
+      await apiService.deleteProduct(product.maSP);
+      setProducts(prev => prev.filter(p => p.maSP !== product.maSP));
+      notificationManager.success('Xóa sản phẩm thành công');
+    } catch (error) {
+      console.error('Delete product error:', error);
+      if (error.message.includes('UNAUTHORIZED')) {
+        notificationManager.error('Phiên đăng nhập hết hạn. Vui lòng đăng nhập lại');
+        if (onLogout) onLogout();
+      } else {
         notificationManager.error('Có lỗi xảy ra: ' + error.message);
       }
     }
@@ -283,7 +322,12 @@ const AdminLayout = ({ onModeChange }) => {
       setEditingBrand(null);
     } catch (error) {
       console.error('Brand save error:', error);
-      notificationManager.error('Có lỗi xảy ra: ' + error.message);
+      if (error.message.includes('UNAUTHORIZED')) {
+        notificationManager.error('Phiên đăng nhập hết hạn. Vui lòng đăng nhập lại');
+        if (onLogout) onLogout();
+      } else {
+        notificationManager.error('Có lỗi xảy ra: ' + error.message);
+      }
     }
   };
 
@@ -296,7 +340,12 @@ const AdminLayout = ({ onModeChange }) => {
       notificationManager.success('Xóa thương hiệu thành công');
     } catch (error) {
       console.error('Brand delete error:', error);
-      notificationManager.error('Có lỗi xảy ra: ' + error.message);
+      if (error.message.includes('UNAUTHORIZED')) {
+        notificationManager.error('Phiên đăng nhập hết hạn. Vui lòng đăng nhập lại');
+        if (onLogout) onLogout();
+      } else {
+        notificationManager.error('Có lỗi xảy ra: ' + error.message);
+      }
     }
   };
 
@@ -330,7 +379,12 @@ const AdminLayout = ({ onModeChange }) => {
       setEditingCategory(null);
     } catch (error) {
       console.error('Category save error:', error);
-      notificationManager.error('Có lỗi xảy ra: ' + error.message);
+      if (error.message.includes('UNAUTHORIZED')) {
+        notificationManager.error('Phiên đăng nhập hết hạn. Vui lòng đăng nhập lại');
+        if (onLogout) onLogout();
+      } else {
+        notificationManager.error('Có lỗi xảy ra: ' + error.message);
+      }
     }
   };
 
@@ -343,7 +397,12 @@ const AdminLayout = ({ onModeChange }) => {
       notificationManager.success('Xóa danh mục thành công');
     } catch (error) {
       console.error('Category delete error:', error);
-      notificationManager.error('Có lỗi xảy ra: ' + error.message);
+      if (error.message.includes('UNAUTHORIZED')) {
+        notificationManager.error('Phiên đăng nhập hết hạn. Vui lòng đăng nhập lại');
+        if (onLogout) onLogout();
+      } else {
+        notificationManager.error('Có lỗi xảy ra: ' + error.message);
+      }
     }
   };
 
@@ -468,8 +527,16 @@ const AdminLayout = ({ onModeChange }) => {
                 <p className="stock">Kho: {product.soLuongTrongKho}</p>
               </div>
               <div className="card-actions">
-                <button onClick={() => openProductModal('view', product)}>👁️</button>
-                <button onClick={() => openProductModal('edit', product)}>✏️</button>
+                <button onClick={() => {
+                  setSelectedProduct(product);
+                  setShowProductDetail(true);
+                }}>👁️</button>
+                <button onClick={() => {
+                  setProductModalType('edit');
+                  setSelectedProduct(product);
+                  setEditingProduct({ ...product });
+                  setShowProductModal(true);
+                }}>✏️</button>
                 <button onClick={() => handleDeleteProduct(product)}>🗑️</button>
               </div>
             </div>
@@ -595,12 +662,21 @@ const AdminLayout = ({ onModeChange }) => {
     return <AdminOrderList onSelectOrder={setSelectedOrderId} />;
   };
 
-  // Handle logout
-  const handleLogout = () => {
+  // CẬP NHẬT: handleLogout
+  const handleLogout = async () => {
     if (window.confirm('Bạn có chắc chắn muốn đăng xuất?')) {
-      notificationManager.success('Đã đăng xuất thành công');
-      if (onModeChange) {
-        onModeChange('customer');
+      try {
+        await authService.logout();
+        notificationManager.success('Đã đăng xuất thành công');
+        if (onLogout) {
+          await onLogout();
+        }
+      } catch (error) {
+        console.error('Logout error:', error);
+        // Force logout
+        if (onLogout) {
+          await onLogout();
+        }
       }
     }
   };
@@ -629,12 +705,14 @@ const AdminLayout = ({ onModeChange }) => {
 
         <div className="sidebar-user">
           <div className="user-avatar">
-            <img src="https://via.placeholder.com/40x40?text=HQ" alt="User" />
+            <img src="https://via.placeholder.com/40x40?text=AD" alt="User" />
           </div>
           {!isSidebarCollapsed && (
             <div className="user-info">
-              <div className="user-name">Administrator</div>
-              <div className="user-role">Quản trị viên</div>
+              <div className="user-name">{authState?.user?.ten || 'Administrator'}</div>
+              <div className="user-role">
+                {authState?.user?.roles?.[0]?.name || 'Quản trị viên'}
+              </div>
             </div>
           )}
         </div>

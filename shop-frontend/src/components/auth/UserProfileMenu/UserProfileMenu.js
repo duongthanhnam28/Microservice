@@ -139,11 +139,17 @@ const UserProfileMenu = ({ user, onLogout, onModeChange }) => {
     }
   };
 
+  // Hiển thị tất cả roles
   const getRoleDisplay = () => {
     if (!currentUser?.roles || currentUser.roles.length === 0) return 'Khách hàng';
-    
-    if (currentUser.isAdmin) return 'Quản trị viên';
-    return 'Khách hàng';
+    const roleNames = currentUser.roles.map(role => role.name).join(', ');
+    return roleNames;
+  };
+
+  // Đếm số lượng quyền
+  const getPermissionCount = () => {
+    if (!currentUser?.permissions) return 0;
+    return currentUser.permissions.length;
   };
 
   const getRoleColor = () => {
@@ -188,6 +194,11 @@ const UserProfileMenu = ({ user, onLogout, onModeChange }) => {
                 <div className="user-role-badge" style={{ backgroundColor: getRoleColor() }}>
                   {getRoleDisplay()}
                 </div>
+                {getPermissionCount() > 0 && (
+                  <div style={{ fontSize: '0.75rem', color: '#94a3b8', marginTop: '0.25rem' }}>
+                    {getPermissionCount()} quyền hạn
+                  </div>
+                )}
               </div>
             </div>
 
@@ -213,7 +224,15 @@ const UserProfileMenu = ({ user, onLogout, onModeChange }) => {
                 <span>Sản phẩm yêu thích</span>
               </button>
 
-              {currentUser.isAdmin && (
+              {/* Menu items theo quyền */}
+              {authService.hasPermission('VIEW_REPORTS') && (
+                <button className="menu-item">
+                  <span className="menu-icon">📊</span>
+                  <span>Xem báo cáo</span>
+                </button>
+              )}
+
+              {authService.hasRole('ADMIN') && (
                 <>
                   <div className="menu-divider"></div>
                   <button 

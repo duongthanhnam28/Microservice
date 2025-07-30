@@ -46,18 +46,14 @@ const AdminOrderList = ({ onSelectOrder }) => {
       const uniqueUserIds = [...new Set(orders.map(order => order.userId))];
       const customerData = {};
 
-      // Lấy thông tin từng khách hàng
       for (const userId of uniqueUserIds) {
         try {
-          // Gọi API account service để lấy thông tin user
-          const response = await fetch(`http://localhost:9002/users/admin/${userId}`, {
-            headers: {
-              'Authorization': `Bearer ${authService.getAccessToken()}`,
-              'Content-Type': 'application/json'
-            }
-          });
+          // SỬA: Sử dụng authService để gọi với token
+          const response = await authService.makeAuthenticatedRequest(
+            `http://localhost:9002/users/admin/${userId}`
+          );
 
-          if (response.ok) {
+          if (response && response.ok) {
             const data = await response.json();
             if (data.code === 1000 && data.result) {
               customerData[userId] = {
@@ -67,16 +63,15 @@ const AdminOrderList = ({ onSelectOrder }) => {
                 username: data.result.username || 'Không có username'
               };
             } else {
-              console.error(`Invalid response for user ${userId}:`, data);
-              customerData[userId] = null; // Không có dữ liệu thực
+              customerData[userId] = null;
             }
           } else {
-            console.error(`API failed for user ${userId}, status:`, response.status);
-            customerData[userId] = null; // Không có dữ liệu thực
+            console.error(`Failed to fetch user ${userId}`);
+            customerData[userId] = null;
           }
         } catch (userError) {
           console.error(`Error fetching user ${userId}:`, userError);
-          customerData[userId] = null; // Không có dữ liệu thực
+          customerData[userId] = null;
         }
       }
 

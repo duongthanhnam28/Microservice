@@ -4,7 +4,7 @@ import AdminLayout from './components/admin/AdminLayout/AdminLayout';
 import CustomerShop from './components/shop/CustomerShop';
 import Navigation from './components/layout/Navigation/Navigation';
 import authService from './services/api/authService';
-import { NotificationContainer } from './components/layout/Notification/Notification';
+import { NotificationContainer, notificationManager } from './components/layout/Notification/Notification';
 import './App.css';
 
 function App() {
@@ -132,28 +132,27 @@ function App() {
     localStorage.setItem('appMode', mode);
   };
 
-  // FIXED: Improved mode change with auth checks
+  // CẬP NHẬT: handleModeChange chỉ kiểm tra admin đơn giản
   const handleModeChange = (newMode) => {
     if (newMode === currentMode) return;
     
     console.log(`Attempting to change mode from ${currentMode} to ${newMode}`);
     
-    // Check if user is authenticated and admin for admin mode
+    // Chỉ kiểm tra admin đơn giản
     if (newMode === 'admin') {
       if (!authState.isAuthenticated) {
-        alert('Vui lòng đăng nhập để truy cập trang quản trị');
+        notificationManager.error('Vui lòng đăng nhập để truy cập trang quản trị');
         return;
       }
       
-      if (!authState.user || !authState.user.isAdmin) {
-        alert('Bạn không có quyền truy cập trang quản trị');
+      if (!authService.isAdmin()) {
+        notificationManager.error('Bạn không có quyền truy cập trang quản trị');
         return;
       }
     }
     
     setIsTransitioning(true);
     
-    // Update URL
     const newPath = newMode === 'admin' ? '/admin' : '/shop';
     window.history.pushState({}, '', newPath);
     

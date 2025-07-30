@@ -11,17 +11,27 @@ const Navigation = ({ currentMode, onModeChange, authState, onLogout }) => {
   const [showAuthModal, setShowAuthModal] = useState(false);
   const [authModalMode, setAuthModalMode] = useState('login');
 
-  // FIXED: Use auth state from App instead of local state
   const isAuthenticated = authState?.isAuthenticated || false;
   const user = authState?.user || null;
 
   const handleLoginSuccess = (userData) => {
     console.log('Navigation: Login success:', userData);
     setShowAuthModal(false);
-    notificationManager.success(`Chào mừng ${userData.ten}!`);
+    
+    // Hiển thị thông báo với role
+    const userRole = userData.roles?.[0]?.name || 'USER';
+    notificationManager.success(`Chào mừng ${userData.ten}! (${userRole})`);
+    
+    // Nếu là admin, tự động chuyển sang admin panel sau 1 giây
+    if (userData.isAdmin) {
+      setTimeout(() => {
+        if (onModeChange) {
+          onModeChange('admin');
+        }
+      }, 1000);
+    }
   };
 
-  // FIXED: Use passed onLogout instead of local logout
   const handleLogout = async () => {
     console.log('Navigation: Logout triggered');
     setIsMenuOpen(false);
@@ -66,11 +76,20 @@ const Navigation = ({ currentMode, onModeChange, authState, onLogout }) => {
           {/* Desktop Actions */}
           <div className="nav-actions">
             {isAuthenticated ? (
-              <UserProfileMenu 
-                user={user} 
-                onLogout={handleLogout}
-                onModeChange={onModeChange}
-              />
+              <>
+                <UserProfileMenu 
+                  user={user} 
+                  onLogout={handleLogout}
+                  onModeChange={onModeChange}
+                />
+                {/* Hiển thị các quyền đặc biệt */}
+                {authService.hasPermission('VIEW_REPORTS') && (
+                  <button className="nav-action-btn">
+                    <span className="btn-icon">📊</span>
+                    <span>Báo cáo</span>
+                  </button>
+                )}
+              </>
             ) : (
               <>
                 <button 
@@ -90,7 +109,8 @@ const Navigation = ({ currentMode, onModeChange, authState, onLogout }) => {
               </>
             )}
 
-            {isAuthenticated && user?.isAdmin && (
+            {/* Chỉ hiển thị nút admin nếu có quyền */}
+            {isAuthenticated && authService.hasRole('ADMIN') && (
               <button 
                 className="mode-switch-btn"
                 onClick={() => onModeChange?.('admin')}
@@ -101,7 +121,7 @@ const Navigation = ({ currentMode, onModeChange, authState, onLogout }) => {
             )}
           </div>
 
-          {/* Mobile Menu Toggle */}
+          {/* Mobile Menu Toggle giữ nguyên */}
           <button 
             className="mobile-menu-toggle"
             onClick={() => setIsMenuOpen(!isMenuOpen)}
@@ -114,7 +134,7 @@ const Navigation = ({ currentMode, onModeChange, authState, onLogout }) => {
         </div>
       </nav>
 
-      {/* Mobile Menu */}
+      {/* Mobile Menu giữ nguyên */}
       <div className={`mobile-menu-overlay ${isMenuOpen ? 'active' : ''}`}>
         <div className="mobile-menu">
           <div className="mobile-menu-header">
@@ -151,8 +171,8 @@ const Navigation = ({ currentMode, onModeChange, authState, onLogout }) => {
                   <strong>{user?.ten}</strong>
                   <span>{user?.email}</span>
                 </div>
-                
-                {user?.isAdmin && (
+                {/* Nút admin chỉ hiển thị nếu có role ADMIN */}
+                {authService.hasRole('ADMIN') && (
                   <button 
                     className="mobile-mode-switch-btn"
                     onClick={() => {
@@ -164,7 +184,6 @@ const Navigation = ({ currentMode, onModeChange, authState, onLogout }) => {
                     <span>Quản trị hệ thống</span>
                   </button>
                 )}
-
                 <button 
                   className="mobile-nav-link"
                   onClick={handleLogout}
@@ -195,7 +214,7 @@ const Navigation = ({ currentMode, onModeChange, authState, onLogout }) => {
         </div>
       </div>
 
-      {/* Auth Modal */}
+      {/* Auth Modal giữ nguyên */}
       {showAuthModal && (
         <LoginRegisterModal
           isOpen={showAuthModal}
